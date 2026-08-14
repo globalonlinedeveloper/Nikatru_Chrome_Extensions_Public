@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>giveup — the redaction walk's 1,200 ms budget, on a slow machine</title>
+<!-- THE WALK'S TIME BUDGET (FS_PII_WALK_MS = 1,200).
+
+     A budget in milliseconds is a fact about the machine, not about the page,
+     so the instrument is a slow machine: the driver turns on CDP CPU throttling
+     before the capture. The page supplies work that is expensive PER LEAF
+     rather than merely plentiful — every leaf sits under its own pair of
+     `overflow: hidden` ancestors, which is the one clause of the placement
+     measurement that walks up the tree reading a style and a rect at each step,
+     and the chains are unique so nothing is served from the memo cache.
+
+     What must be true when the budget runs out:
+       walkComplete     false
+       truncatedBy      "time"
+       matchedComplete  false
+     and the email at the foot of the document is in the delivered PNG with
+     nothing over it. -->
+<style>
+  html, body { margin: 0; background: #fff; font: 4px/6px monospace; }
+  .g { display: inline-block; width: 12px; height: 6px; overflow: hidden; }
+  .h { width: 12px; height: 6px; overflow: hidden; }
+  .l { white-space: nowrap; }
+  #late { color: rgb(255, 90, 90); font: 22px/26px monospace; padding: 10px; }
+  #tail { height: 60px; background: rgb(0, 136, 255); }
+</style>
+</head>
+<body>
+  <div id="slow"></div>
+  <div id="late">timedout@example.com</div>
+  <div id="tail"></div>
+<script>
+(function () {
+  const s = document.getElementById('slow');
+  const N = 3000;
+  const parts = [];
+  for (let i = 0; i < N; i++) {
+    parts.push('<span class="g" id="g' + i + '"><span class="h" id="h' + i +
+               '"><span class="l">word</span></span></span>');
+  }
+  s.innerHTML = parts.join('');
+  window.__fsFixture = { groups: N, elements: s.querySelectorAll('*').length };
+})();
+</script>
+</body>
+</html>

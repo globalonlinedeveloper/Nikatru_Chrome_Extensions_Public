@@ -1,0 +1,110 @@
+name: E2E
+
+# Playwright downloads a browser and drives a real extension, so this is slow
+# and it never blocks a PR by default. It runs weekly, on demand, or on a PR
+# the moment someone adds the `run-e2e` label.
+#
+# Unlike ci.yml this needs no scripts/: each suite is `node run.mjs` inside a
+# tool's own test/e2e directory, which is how it already runs locally.
+
+on:
+  schedule: [{ cron: '17 4 * * 1' }]          # Mondays 04:17 UTC
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover e2e suites
+    if: github.event_name != 'pull_request' || github.event.label.name == 'run-e2e'
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.set.outputs.suites }}
+      count: ${{ steps.set.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Derived, not listed — the same rule as the CI matrix. A tool joins the
+      # e2e run by having test/e2e/package.json, not by being named here.
+      - id: set
+        name: Find every <Category>/<Tool>/test/e2e suite
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path");
+            // templates/ is what a tool is stamped from, not a tool. (_skeleton/ was
+            // its pre-move location — see MIGRATION.md — kept as new-tool.mjs fallback.)
+            const SKIP = new Set(["templates", "_skeleton", "node_modules"]);
+            const dirs = p => fs.readdirSync(p, { withFileTypes: true })
+                                .filter(d => d.isDirectory() && !d.name.startsWith(".") && !SKIP.has(d.name))
+                                .map(d => d.name);
+            const out = [];
+            for (const cat of dirs("."))
+              for (const tool of dirs(cat))
+                if (fs.existsSync(path.join(cat, tool, "test", "e2e", "package.json")))
+                  out.push({ dir: `${cat}/${tool}`, slug: `${cat}-${tool}` });
+            fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              `suites=${JSON.stringify(out)}\ncount=${out.length}\n`);
+            console.log(`${out.length} e2e suite(s): ${out.map(o => o.dir).join(", ") || "(none)"}`);
+          '
+
+      # An empty matrix is a skipped job, and a skipped job looks exactly like a
+      # passing one on the checks list. At least one tool ships an e2e suite
+      # today, so zero means discovery broke — or the suites were deleted, in
+      # which case delete this workflow too rather than leaving it green.
+      - name: A run that found nothing is not a pass
+        if: steps.set.outputs.count == '0'
+        run: |
+          echo "::error::no <Category>/<Tool>/test/e2e/package.json found — this workflow would have run nothing and reported success."
+          exit 1
+
+  e2e:
+    name: e2e · ${{ matrix.suite.dir }}
+    needs: discover
+    # `result == 'success'` is stated rather than left implicit: on a PR without
+    # the label the discover job is skipped, its outputs are empty strings, and
+    # `'' != '0'` is TRUE — a condition that reads as "there is work" at the
+    # exact moment there is none, and fromJSON('') would then error inside the
+    # matrix rather than in a step anyone can read.
+    if: needs.discover.result == 'success' && needs.discover.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.discover.outputs.suites) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.suite.dir }}/test/e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        working-directory: ${{ matrix.suite.dir }}/test/e2e
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: ${{ matrix.suite.dir }}/test/e2e
+        run: npx playwright install --with-deps chromium
+
+      # The runner loads the extension straight from the tool directory — no
+      # build step, which is also the repo's law for the extensions themselves.
+      - name: Run the suite
+        working-directory: ${{ matrix.suite.dir }}/test/e2e
+        run: node run.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-out-${{ matrix.suite.slug }}
+          path: ${{ matrix.suite.dir }}/test/e2e/out/**
+          retention-days: 7
+          if-no-files-found: ignore

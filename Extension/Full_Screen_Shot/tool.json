@@ -1,0 +1,105 @@
+{
+  "$schema": "../../scripts/schema/tool.schema.json",
+
+  "README": "THE MONOREPO CONTRACT for FullShot. Filled in from this tool's own manifest.json, publish/manifest.firefox.json, publish/STORE-LISTING.md, publish/package.node.js and the shipped publish/fullshot-1.10.1.zip — not from the description of it in any planning document. Where the two disagreed, the tree won and the disagreement is recorded in NOTES rather than smoothed over. Every number below was re-measured with the repo's own scripts before it was written down, and the commands that produced it are named next to it. Nothing here changes a single line of FullShot's source: this file is the only required addition.",
+
+  "id": "fullshot",
+  "name": "FullShot",
+  "surface": "extension",
+  "status": "wip",
+  "summary": "Full-page, visible-area, region and element capture, with an annotation editor, PDF export and on-device redaction.",
+  "aiHandoff": "The capture leaves the browser as an ai-handoff/1.1 envelope — the image plus the facts a model would otherwise have to guess from pixels: what was captured, at what scale, what was cut, and whether anything was redacted.",
+
+  "manifest": "manifest.json",
+  "core": null,
+
+  "package": {
+    "include": [
+      "manifest.json",
+      "background.js",
+      "content/*.js",
+      "icons/*.png",
+      "pages/*.html",
+      "pages/*.js",
+      "pages/*.css",
+      "popup/*.html",
+      "popup/*.js",
+      "popup/*.css",
+      "_locales/*/messages.json"
+    ],
+    "exclude": [
+      "test/**",
+      "publish/**",
+      "Reference/**",
+      "i18n/**",
+      ".claude/**",
+      "node_modules/**",
+      "**/*.md",
+      "**/*.node.js",
+      "**/*.zip",
+      "dist/**",
+      "tool.json"
+    ]
+  },
+
+  "targets": {
+    "chromium": { "stores": ["chrome", "edge"] },
+    "firefox": { "overlay": null }
+  },
+
+  "tests": [
+    "test/sim-torture.node.js",
+    "test/pixel-sim/run.js",
+    "test/a11y-sim.node.js",
+    "test/aihandoff-sim.node.js",
+    "test/background-sim.node.js",
+    "test/batch-sim.node.js",
+    "test/beautify-sim.node.js",
+    "test/canvas2d-sim.node.js",
+    "test/editor-sim.node.js",
+    "test/i18n-sim.node.js",
+    "test/scrollclip-sim.node.js"
+  ],
+
+  "policy": {
+    "permissions": {
+      "activeTab": "Captures only the tab the user acted on, from the moment they click the toolbar button or press a capture shortcut — the least-privileged way to read the current page, and it grants no standing access to any site.",
+      "scripting": "Injects the capture engine into the active tab on demand, so it can measure the page, scroll it to load and stitch the full length, and let the user pick a region or an element — instead of declaring a persistent content script on every page.",
+      "downloads": "Saves a finished screenshot (PNG, JPEG, WebP or PDF) or an exported GIF/WebM when the user chooses to save it. FullShot starts no download on its own.",
+      "storage": "Keeps the user's own preferences — image format, capture options, filename template, PDF options, theme — in chrome.storage.sync. No page content and no screenshots are put there.",
+      "unlimitedStorage": "Finished screenshots are kept in a local IndexedDB history so they can be reopened, edited and exported later. Screenshots are large; without this the default quota silently drops the user's own capture history. The data never leaves the device."
+    },
+    "optionalHostPermissions": {
+      "<all_urls>": "OPTIONAL and requested at run time, never at install: only when the user turns on expanding scrollable content inside cross-origin iframes, or Batch URL capture. Decline it and every other feature keeps working — single-tab capture needs activeTab alone."
+    },
+    "networkAllowlist": []
+  },
+
+  "listings": { "chrome": null, "edge": null, "firefox": null },
+
+  "absent": {
+    "README": "Named by the architecture but NOT PRESENT for this tool at the time this file was written, measured rather than assumed. Recorded rather than stubbed, so that a reader can tell a gap from an oversight — and deleted the day the real thing lands, because a stale absence is the same lie pointing the other way. One entry that stood here yesterday (scripts/schema/tool.schema.json) is gone for exactly that reason: the schema now exists, so this file carries the $schema key instead of an excuse.",
+    "CHANGELOG.md": "The architecture requires a Keep-a-Changelog file whose top entry equals the manifest version and the release tag; it is also the input the release notes are cut from. FullShot has none — its history lives in HANDOFF.md and ROADMAP.md, which are session logs rather than a release record. This is no longer only an observation: `node scripts/check-version.mjs fullshot` exits 1 on it today (1 passed, 1 FAILED — the pass being that manifest.json declares v1.10.1). Backfilling it is what turns version agreement from two numbers into three, and it is a prerequisite for tagging fullshot-v1.10.1 at all.",
+    "vendor/core/": "No shared core is vendored. The reason has changed since this file was first drafted and the old one is now false: scripts/sync-core.mjs EXISTS, and core/v1 holds settings.js, storage.js and jobs.js. What has not happened is a sync against this tree — there is no vendor/core/ and no .coremeta.json — so \"core\" stays null and vendor/core/ stays out of package.include. `node scripts/check-core-sync.mjs fullshot` passes today for that reason and says so: \"this tool vendors no core — tool.json declares no core channel and there is no vendor/core/ directory — consistent\". When it lands the directory is vendor/core/ — NEVER _core/, which Chrome refuses to load.",
+    "publish/manifest.firefox.json (as an OVERLAY)": "The file exists and is what the Firefox package is built from, but it is a COMPLETE SECOND MANIFEST, not an RFC 7386 merge patch: version, description and all five permissions are stated twice. targets.firefox.overlay is null rather than aiming a merge-patcher at a file that is not an overlay.",
+    "content_security_policy": "manifest.json declares none. Not a defect and not a false claim — the zero-network claim is true and measured — but it is the difference between a promise a scanner checks and a rule the browser enforces. scripts/policy-check.mjs warns about it by name: extension_pages with connect-src 'none' makes a fetch() from an extension page fail at runtime even if one is ever added. The template's own manifest already carries that header, so adopting it is a copy rather than a design."
+  },
+
+  "NOTES": {
+    "$schema": "Added the day scripts/schema/tool.schema.json actually existed. It drives editor autocomplete and hover docs only; the gate is scripts/lib/toolinfo.mjs, because the checks that matter are cross-file (does the manifest exist, does every listed test path resolve, does surface match the category directory) and no JSON Schema can express them. The three non-schema keys below — README, absent, NOTES — load fine but are reported by the loader as unknown keys with \"nothing reads it\", which is accurate and is the point: they are for the human reading the file, not for a script.",
+    "status": "\"wip\", not \"shipping\". \"shipping\" means listed in a store. FullShot v1.10.1 is built, packaged for both engines and green on every simulation, and it has no listing anywhere — see listings, all null. Flip this the day the first store URL exists, not the day the zip does.",
+    "summary": "This field is the catalogue line, not the manifest description — and the manifest description is over the store's limit, in every sense of over. Measured by `node scripts/policy-check.mjs fullshot`: the en description (_locales/en/messages.json → appDescription) is 137 characters against a 132 cap, and it is not an English-only problem — 40 of the 55 catalogues exceed 132, the longest at 199, and three locale NAMES (ca, es, es_419) exceed the 45-character name cap. The store rejects the upload; it does not truncate. So this is not \"shorten one sentence and regenerate\": every over-length translation has to come down individually, and the en source has to come down first because the others are generated from it. It is a listing change, not a code change, and it is the single thing standing between this tree and a submission.",
+    "aiHandoff": "AI-HANDOFF-ENVELOPE.md declares ai-handoff/1.1 normative for FullShot 1.11+, implemented in pages/common.js (fsAi*) and consumed by pages/result.js, graded by test/aihandoff-sim.node.js. The manifest version is 1.10.1 — so this line describes the tree, which is what this file describes, and not necessarily the bytes of the last built zip.",
+    "core": "null on purpose. scripts/sync-core.mjs exists now, so the remaining condition is a run, not a script: vendor a core only once sync-core has been run against this tree and there is a vendor/core/.coremeta.json of hashes for check-core-sync to verify. Declaring { channel: v1 } before that asserts a relationship nothing verifies, against a directory that is not there.",
+    "package": "VERIFIED TWICE, AGAINST THE SHIPPED ARTIFACT AND AGAINST THE REPO'S OWN LOADER. publish/fullshot-1.10.1.zip holds 85 entries — background.js and manifest.json at the root, and _locales/ content/ icons/ pages/ popup/ below it, with all 55 locale catalogues present. Applying the include/exclude rules above through scripts/lib/toolinfo.mjs packagedFiles() selects 85 files, 55 of them locales, with zero locales reachable only by the unconditional locale collector — i.e. this block and the shipped zip name the same file set, not merely the same count. The list that produced the zip is ALLOW in publish/package.node.js, which stays authoritative for the build; this block is what scripts/policy-check.mjs grades.",
+    "package.LICENSE": "DELIBERATELY RECORDED, NOT COPIED FROM THE TEMPLATE: LICENSE is absent from FullShot's allowlist and absent from the shipped zip (checked by reading the archive's central directory), while the template allowlists it explicitly because PolyForm Shield's notice is required to travel with every copy. FullShot's root LICENSE is PolyForm Shield 1.0.0 as well. Adding it to the package is a licence question for the owner, so it is named here rather than silently added to include.",
+    "package.exclude": "Two entries name paths that do not exist in this tree today — .claude/** and dist/**. They are kept deliberately: both are directories that appear without anyone deciding to add them (an agent's config, a build output), and an exclude that fires zero times costs nothing while an exclude added after the fact costs a leaked package. Reference/** and i18n/** and test/** do exist and do fire.",
+    "targets.firefox": "The Firefox package is built by swapping in publish/manifest.firefox.json wholesale. Its shared fields are kept equal to manifest.json by hand and by the bump script rather than by a merge patch, which is why a bump has to be right twice. Read back out of publish/fullshot-1.10.1-firefox.zip, the packaged Firefox manifest carries BOTH background forms — service_worker and scripts [pages/db.js, pages/batch.js, background.js] — plus options_ui instead of options_page, which is correct: each engine reads its own key.",
+    "targets.firefox.geckoId": "🔴 OWNER ACTION, AND IT IS PERMANENT. The packaged Firefox manifest carries browser_specific_settings.gecko.id = \"fullshot@REPLACE-WITH-YOUR-DOMAIN.example\" — verified by inflating manifest.json out of publish/fullshot-1.10.1-firefox.zip and reading the key. AMO fixes the add-on identity at FIRST SIGNING: ship the placeholder once and the listing, its reviews and its users are attached to it forever. publish/verify-firefox-package.node.js already fails on it by design; nobody but the owner can pick the replacement.",
+    "tests": "All eleven were re-run on Node v24.18.0 immediately before this file was written — ten test/*.node.js sims plus test/pixel-sim/run.js — and every one exited 0 with ALL PASS. test/e2e/ is deliberately not listed: it needs a real Chromium and a Playwright install, so it belongs to the gated browser tier rather than to the per-push one. A listed path that stops resolving does not fail, it silently stops running, which is why the array is exact paths rather than a glob.",
+    "policy.permissions": "Sourced from publish/STORE-LISTING.md §4, which is what the store dashboard receives, and cross-checked against the five permissions manifest.json actually declares. `node scripts/policy-check.mjs fullshot` now grades that agreement directly and reports \"5 permission(s), all justified — activeTab, scripting, downloads, storage, unlimitedStorage\", plus \"no static host_permissions\" for the optional <all_urls>. Keeping the two texts in one voice is the point: the justification a reviewer reads and the justification the repo asserts should not be two separately-maintained documents.",
+    "policy.networkAllowlist": "EMPTY, AND MEASURED TWICE. A scan of the packaged file set for fetch( · XMLHttpRequest · WebSocket · EventSource · sendBeacon returns nothing, with a control pattern over the same files matching to prove the scan was looking; scripts/policy-check.mjs repeats it on the packaged set with comments and string literals blanked first, and reports \"zero network calls in 15 packaged script(s) — allowlist is empty, as claimed\". The blanking matters: grep the raw source and you grade the comment in background.js that says there are no network calls. FullShot collects no analytics and contacts no server — including the redaction detector, which runs entirely on the device.",
+    "gate status today": "So that nobody reads this file as a claim of green: `node scripts/policy-check.mjs fullshot` exits 1 — 11 passed, 1 FAILED, 2 warnings — and the single failure is the store metadata length limits described under NOTES.summary. `node scripts/check-version.mjs fullshot` exits 1 on the missing CHANGELOG.md. `node scripts/check-core-sync.mjs fullshot` exits 0. Both failures are listing/paperwork work on an unpublished tool, neither is a code defect, and both are named above rather than deferred to whoever runs CI first.",
+    "listings": "All null: nothing is listed yet. When they land, remember that the metadata cannot be shared with a sibling tool — Microsoft certification 10.1.4 requires each listing to carry its own — and that a Chrome Web Store publisher account holds at most 20 extensions, enforced per publisher, which is a limit on the account rather than on any tool in it. The privacy policy is served from nikatru.com; publish/PRIVACY-POLICY.html is the source of that page, not the published copy."
+  }
+}

@@ -1,0 +1,143 @@
+name: Release
+
+# Fires on a per-tool tag: <tool-id>-v<semver>, e.g. fullshot-v1.10.1.
+# The tool ID — not the directory — is the stable public handle, which is why
+# the tag, the zip names and the CI matrix all speak in ids. Directories can be
+# renamed; ids cannot.
+#
+# Chrome's version format is 1–4 dot-separated integers with no pre-release
+# suffix, so both a 3-part and a 4-part tag are accepted (the 4th component is
+# for store-only re-uploads that carry no source change).
+#
+# Requires the same scripts/ gates as ci.yml. Not all of them are written yet —
+# the first step below is the preflight that says which, before anything runs.
+# A release is the one place where a missing gate must stop the work entirely:
+# a published artifact cannot be un-published, and the store keeps whichever
+# package it received first.
+
+on:
+  push:
+    tags:
+      - '*-v[0-9]+.[0-9]+.[0-9]+'
+      - '*-v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
+      # core is versioned and tagged (core-v1.0.0) but it is not a tool: it
+      # ships no package and has no store listing, so tag parsing below would
+      # go looking for a tool called "core" and fail confusingly.
+      - '!core-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the only write in the repo: creating the release
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+
+      # Derived from this file, not listed beside it: whatever this workflow
+      # actually calls is what gets checked, so the two can never disagree.
+      - name: Preflight — every gate this release runs must exist
+        shell: bash
+        run: |
+          set -uo pipefail
+          called=$(grep -ohE '(scripts)/[a-z0-9][a-z0-9./-]*\.(mjs|node\.js)' .github/workflows/release.yml | sort -u)
+          if [ -z "$called" ]; then
+            echo "::error::this preflight found no gate-script call in its own workflow — its pattern is broken, and it was about to clear a release it never inspected."
+            exit 1
+          fi
+          missing=0
+          while IFS= read -r s; do
+            if [ -f "$s" ]; then printf 'PRESENT  %s\n' "$s"
+            else printf 'ABSENT   %s\n' "$s"; missing=$((missing + 1)); fi
+          done <<< "$called"
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing gate script(s) above are ABSENT, so this tag cannot be released: the artifact would go out ungraded by checks this repository claims to run. Write them, or delete the tag."
+            exit 1
+          fi
+
+      - name: Parse tag  (fullshot-v1.10.1 → id + version)
+        id: tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "id=${TAG%%-v*}"     >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#*-v}" >> "$GITHUB_OUTPUT"
+
+      # Fetched explicitly so the ancestry check below can only fail for the
+      # real reason (the tag is off-main) and never because the ref was absent.
+      - name: Tag must be reachable from main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Gates (manifest == CHANGELOG == tag, policy, core sync)
+        run: |
+          node scripts/check-version.mjs ${{ steps.tag.outputs.id }} --expect ${{ steps.tag.outputs.version }}
+          node scripts/policy-check.mjs   ${{ steps.tag.outputs.id }}
+          node scripts/check-core-sync.mjs ${{ steps.tag.outputs.id }}
+
+      - name: Sims
+        run: node scripts/run-tests.mjs ${{ steps.tag.outputs.id }}
+
+      - name: Build all store packages
+        run: |
+          node scripts/pack.mjs ${{ steps.tag.outputs.id }} --target chromium --out dist --release
+          node scripts/pack.mjs ${{ steps.tag.outputs.id }} --target firefox  --out dist --release
+
+      - name: Reference integrity + leak check on every artifact
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          zips=(dist/*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "::error::pack.mjs produced no zips — nothing to verify, so nothing to release."
+            exit 1
+          fi
+          for z in "${zips[@]}"; do
+            echo "── $z"
+            node scripts/verify-refs.mjs --zip "$z" --strict --leaks
+          done
+
+      # web-ext reads the unpacked tree pack.mjs leaves behind. Checked first so
+      # a packer that stopped emitting it fails with that sentence rather than
+      # with web-ext's "source directory not found", which reads like a lint bug.
+      - name: web-ext lint
+        run: |
+          set -euo pipefail
+          if [ ! -d dist/unpacked-firefox ]; then
+            echo "::error::dist/unpacked-firefox does not exist — pack.mjs did not leave an unpacked Firefox tree for web-ext to lint, so the AMO package is going out ungraded."
+            exit 1
+          fi
+          npx --yes web-ext@8 lint --source-dir dist/unpacked-firefox --warnings-as-errors
+
+      - name: Checksums
+        run: cd dist && sha256sum *.zip | tee SHA256SUMS.txt
+
+      - name: Release notes from CHANGELOG
+        run: |
+          node scripts/changelog-section.mjs \
+            ${{ steps.tag.outputs.id }} ${{ steps.tag.outputs.version }} > notes.md
+          {
+            echo ''
+            echo '### Install'
+            echo '- Chrome Web Store / Edge Add-ons: upload `*-chromium.zip` (the identical file goes to both)'
+            echo '- Firefox (AMO): upload `*-firefox.zip`'
+            echo ''
+            echo 'Artifacts are byte-reproducible: rebuild from this tag with'
+            echo '`node scripts/pack.mjs ${{ steps.tag.outputs.id }} --target chromium --release` and compare SHA256SUMS.txt.'
+          } >> notes.md
+
+      # Store submission stays manual and owner-gated. This publishes the
+      # GitHub Release only; nothing here talks to a store.
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.zip dist/SHA256SUMS.txt \
+            --title "${{ steps.tag.outputs.id }} v${{ steps.tag.outputs.version }}" \
+            --notes-file notes.md

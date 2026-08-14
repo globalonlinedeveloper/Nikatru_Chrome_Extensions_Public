@@ -1,0 +1,398 @@
+name: CI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Every gate here is a `node scripts/<name>.mjs` call and nothing else, so the
+# identical command runs on a runner and in PowerShell on the owner's machine.
+# That is the whole design: CI is a scheduler, the scripts are the gates.
+#
+# This workflow therefore REQUIRES these scripts in scripts/:
+#
+#   discover.mjs        globs */*/tool.json -> the CI matrix (diff-aware);
+#                       must emit TOOL IDS (`fullshot`), not directories —
+#                       the id is the stable public handle, the directory is not
+#   secret-scan.mjs     credential shapes, whole tree
+#   lint.mjs            node --check on every shipped .js/.mjs
+#   policy-check.mjs    privacy / permission / store-limit gates
+#   check-core-sync.mjs  <tool>/vendor/core matches core/
+#   check-version.mjs   manifest version == top CHANGELOG entry
+#   run-tests.mjs       runs exactly the commands in tool.json "tests"
+#   pack.mjs            allowlist -> deterministic zip, per target
+#   verify-refs.mjs     reference integrity + leak check, ON THE ZIP
+#   sha256.mjs          hash one file (used by the determinism check)
+#
+# SOME OF THEM ARE NOT WRITTEN YET, AND THIS FILE DOES NOT PRETEND OTHERWISE.
+# The `gate-inventory` job below reads the set of scripts actually called out of
+# these workflow files and prints PRESENT / ABSENT for each, every run. It is
+# derived rather than listed, so it cannot drift the way this comment can, and
+# it is the answer to "which of these gates is real today" — not the prose here.
+#
+# A missing script FAILS its job. Do not "fix" that with an `if [ -f "$gate" ]`
+# guard: a workflow that skips its own absent gates is a green build that
+# checks nothing, which is strictly worse than a red one that names what is
+# missing. The inventory job exists so that the red says which, in one place,
+# instead of eight `Cannot find module` errors scattered across a matrix.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by default, stated explicitly rather than inherited. No job in this
+# workflow writes to the repository; the release workflow is the only writer.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  gate-inventory:
+    name: Gate inventory (which gates exist)
+    runs-on: ubuntu-latest
+    # Deliberately NOT a `needs:` of anything. A gate that exists must still run
+    # and prove itself on this push even while another one is unwritten; making
+    # every job wait on a complete toolchain would mean the day one script lands
+    # nothing else has been exercised in weeks.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every gate script these workflows call must exist
+        shell: bash
+        run: |
+          set -uo pipefail
+          # DERIVED, NOT LISTED. The set is read out of the workflow files, so it
+          # is exactly what will be invoked — .mjs gates and the .node.js self-test
+          # alike. A hand-written list would be a second copy of the same fact, and
+          # the copy is the one that rots, toward looking healthier than the repo is.
+          called=$(grep -rhoE '(scripts)/[a-z0-9][a-z0-9./-]*\.(mjs|node\.js)' .github/workflows | sort -u)
+          if [ -z "$called" ]; then
+            echo "::error::this check found no gate-script call in .github/workflows at all — its own pattern is broken, and it was about to report a clean inventory over an empty set."
+            exit 1
+          fi
+          missing=0
+          total=0
+          while IFS= read -r s; do
+            total=$((total + 1))
+            if [ -f "$s" ]; then
+              printf 'PRESENT  %s\n' "$s"
+            else
+              printf 'ABSENT   %s\n' "$s"
+              missing=$((missing + 1))
+            fi
+          done <<< "$called"
+          echo
+          echo "$((total - missing)) of $total gate script(s) present."
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing gate script(s) listed above as ABSENT are called by a workflow in this repository and do not exist. Until they land, the jobs that call them fail — that is the intended state, not a misconfiguration. What must never happen is those gates being skipped, because a skipped gate and a passing gate look identical on the checks list."
+            exit 1
+          fi
+
+  discover:
+    name: Discover affected tools
+    runs-on: ubuntu-latest
+    outputs:
+      tools: ${{ steps.set.outputs.tools }}
+      count: ${{ steps.set.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+
+      # The matrix below is derived, never listed. The failure mode of a derived
+      # matrix is the opposite of a hardcoded one: instead of tool #2 silently
+      # getting no CI, EVERY tool silently gets no CI when discovery breaks and
+      # the array comes back empty.
+      #
+      # So this is discovery's negative test — and it is a CROSS-CHECK, not a
+      # floor. Plain `find` counts the tool.json files; `discover.mjs --all` says
+      # how many tools it can see; a DISAGREEMENT fails the build. That catches
+      # the broken glob, which is the failure this exists for, without also
+      # failing on the one state that is real rather than broken: a repo whose
+      # tools have not been onboarded to tool.json yet. discover.mjs documents
+      # that state and exits 0 over it, and a guard that contradicts its own gate
+      # teaches people to distrust both.
+      - name: Cross-check discovery against the filesystem
+        shell: bash
+        run: |
+          set -uo pipefail
+          # templates/ carries a tool.json too — it is the thing a tool is stamped
+          # FROM, not a tool: it does not ship, and it has no id a reporter could
+          # name. (_skeleton/ was its location before the move recorded in
+          # MIGRATION.md; the exclusion is kept because new-tool.mjs deliberately
+          # keeps that path as a fallback.) private/ is gitignored and absent on a runner;
+          # it is excluded anyway so this reads the same on the owner's machine.
+          # toolinfo.mjs excludes the same directories, which is what makes the
+          # two counts comparable at all.
+          found=$(find . -mindepth 3 -maxdepth 3 -name tool.json \
+                    -not -path './.git/*' -not -path './templates/*' \
+                    -not -path './_skeleton/*' -not -path './private/*' \
+                    -not -path './node_modules/*')
+          n_find=$(printf '%s' "$found" | grep -c . || true)
+          echo "tool.json on disk: $n_find"
+          [ -n "$found" ] && printf '%s\n' "$found" | sed 's|^\./||'
+
+          out="$RUNNER_TEMP/discover-all.txt"
+          : > "$out"
+          node scripts/discover.mjs --all --out "$out"
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::error::discover.mjs exited $code — the matrix cannot be trusted, so nothing below it can be either."
+            exit 1
+          fi
+          ids=$(sed -n 's/^tools=//p' "$out" | tail -1)
+          if [ -z "$ids" ]; then
+            echo "::error::discover.mjs exited 0 but wrote no tools= line to --out. Its output contract changed, and every count derived from it below would be a guess."
+            exit 1
+          fi
+          n_disc=$(node -p 'JSON.parse(process.argv[1]).length' "$ids")
+          echo "discover.mjs --all sees: $n_disc  $ids"
+
+          if [ "$n_find" -ne "$n_disc" ]; then
+            echo "::error::discovery disagrees with the filesystem — $n_find tool.json file(s) on disk, $n_disc tool(s) seen by discover.mjs. One of the two is wrong, and the expensive version of being wrong is the low one: a tool that gets no CI looks exactly like a tool that passed."
+            exit 1
+          fi
+          if [ "$n_find" -eq 0 ]; then
+            echo "::notice::no tool has been onboarded to tool.json yet. That is a real state, not a search failure — the per-tool jobs below have nothing to grade, and say so rather than reporting a green run over an empty set."
+          fi
+
+      # Issue forms cannot be generated, so their dropdowns are the one place a
+      # new tool has to be added by hand — exactly the kind of step that gets
+      # forgotten. Checked here so it fails in the PR that adds the tool.
+      - name: Issue templates list every tool id
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail=0
+          checked=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            id=$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).id || ''" "$f")
+            if [ -z "$id" ]; then
+              echo "::error file=$f::tool.json has no \"id\" — the id is the stable public handle every tag, zip and matrix entry is built from."
+              fail=1
+              continue
+            fi
+            checked=$((checked + 1))
+            for t in .github/ISSUE_TEMPLATE/bad-page.yml .github/ISSUE_TEMPLATE/bug.yml; do
+              if ! grep -qF -- "($id)" "$t"; then
+                echo "::error file=$t::tool id '$id' is missing from the extension dropdown — a reporter cannot name this tool"
+                fail=1
+              fi
+            done
+          done < <(find . -mindepth 3 -maxdepth 3 -name tool.json \
+                     -not -path './.git/*' -not -path './templates/*' \
+                     -not -path './_skeleton/*' -not -path './private/*' \
+                     -not -path './node_modules/*')
+          # Coverage, printed rather than assumed: with no tools this check cannot
+          # fail, and an assertion that cannot fail inflates apparent coverage.
+          # The cross-check above is what decides whether zero is legitimate.
+          echo "issue-template dropdowns graded against $checked tool id(s)."
+          exit $fail
+
+      # discover.mjs diffs against the base ref and widens to ALL tools when
+      # core/ or scripts/ changed, or when the base is unknown (the first push,
+      # where github.event.before is all-zeros).
+      - id: set
+        name: Build the matrix
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/discover.mjs --base "$BASE_SHA" --out "$GITHUB_OUTPUT"
+
+      - name: Show the matrix
+        env:
+          TOOLS: ${{ steps.set.outputs.tools }}
+          COUNT: ${{ steps.set.outputs.count }}
+        run: |
+          echo "affected tools ($COUNT): $TOOLS"
+          if [ "$COUNT" = "0" ]; then
+            echo "::notice::no tool was affected by this change — the per-tool jobs below are skipped on purpose, not by accident."
+          fi
+
+  secrets-scan:
+    name: Secret scan (full tree)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - run: node scripts/secret-scan.mjs .
+
+  core:
+    name: core sims
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+
+      # core/ is vendored into tools, so a regression in it is N outages at
+      # once — hence the admission rule that every core module ships a Node sim
+      # in core/test/. If core/ does not exist yet this says so and stops; if it
+      # exists and ships no sims, that is a FAILURE, not a pass.
+      #
+      # core.json records this exact hazard in its own `gaps` list: "a CI job
+      # that loops over core/test/*.node.js runs zero files and reports success".
+      # This step is that sentence encoded. While core/test/ is empty the job is
+      # red on purpose, and the fix is sims — not a softer guard.
+      - name: Lint + run core sims
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d core ]; then
+            echo "::notice::core/ does not exist in this tree — there is no shared runtime to check yet."
+            exit 0
+          fi
+          node scripts/lint.mjs core
+          shopt -s nullglob
+          sims=(core/test/*.node.js)
+          if [ ${#sims[@]} -eq 0 ]; then
+            echo "::error::core/ exists but core/test/ holds no sims. Every core module ships with one, because core has N consumers and a regression there is N outages. core.json's own gaps list names this; it is a known gap, not a surprise, and it is red until the sims exist."
+            exit 1
+          fi
+          for f in "${sims[@]}"; do echo "── $f"; node "$f"; done
+
+  gates:
+    name: gates · ${{ matrix.tool }}
+    needs: discover
+    if: needs.discover.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(needs.discover.outputs.tools) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - name: Syntax check every shipped script
+        run: node scripts/lint.mjs ${{ matrix.tool }}
+      - name: Privacy / permission / store-limit policy
+        run: node scripts/policy-check.mjs ${{ matrix.tool }}
+      - name: Vendored core matches core/
+        run: node scripts/check-core-sync.mjs ${{ matrix.tool }}
+      - name: Version agreement (manifest ↔ CHANGELOG)
+        run: node scripts/check-version.mjs ${{ matrix.tool }}
+
+  sims:
+    name: sims · ${{ matrix.tool }} · node ${{ matrix.node }}
+    needs: [discover, gates]
+    if: needs.discover.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(needs.discover.outputs.tools) }}
+        node: ['22', '24']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ matrix.node }}' }
+
+      # Runs exactly the commands in tool.json "tests". No npm install, ever —
+      # the sims load the real shipped source on bare Node.
+      - name: Run tool sims
+        run: node scripts/run-tests.mjs ${{ matrix.tool }}
+
+      - name: Upload pixel-sim output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixels-${{ matrix.tool }}-node${{ matrix.node }}
+          path: |
+            **/test/pixel-sim/out/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+  package:
+    name: package · ${{ matrix.tool }} · ${{ matrix.target }} · ${{ matrix.os }}
+    needs: [discover, sims]
+    if: needs.discover.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(needs.discover.outputs.tools) }}
+        target: [chromium, firefox]
+        os: [ubuntu-latest, windows-latest]   # windows leg catches path/CRLF/casing bugs
+    runs-on: ${{ matrix.os }}
+    # The two targets are fixed here rather than read from tool.json, which is
+    # the one place in this workflow where the coupling surface is not tool.json.
+    # It is honest about the cost: a tool that cannot build a firefox package
+    # FAILS this leg rather than skipping it. Worth knowing today — FullShot's
+    # tool.json declares targets.firefox.overlay = null, because publish/
+    # manifest.firefox.json is still a full second manifest rather than the
+    # RFC 7386 merge patch pack.mjs expects. Until that conversion lands, the
+    # firefox leg is red for a reason the tree already declares, and the right
+    # fix is the overlay, not a matrix that quietly stops building Firefox.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+
+      - name: Build package
+        run: node scripts/pack.mjs ${{ matrix.tool }} --target ${{ matrix.target }} --out dist
+
+      # THE gate. Every manifest / HTML / importScripts / executeScript
+      # reference must resolve, case-exactly, to an entry INSIDE the zip. This
+      # is the check that caught a missing background.js before it shipped — an
+      # extension that could not have loaded at all.
+      - name: Reference integrity (inside the zip)
+        run: node scripts/verify-refs.mjs --zip dist/${{ matrix.tool }}-${{ matrix.target }}.zip --strict
+
+      - name: Leak check (no test/, docs, node_modules, zips, secrets)
+        run: node scripts/verify-refs.mjs --zip dist/${{ matrix.tool }}-${{ matrix.target }}.zip --leaks
+
+      # A reproducible zip is what turns "no network calls" from a claim into
+      # something a reviewer can verify: rebuild from the tag, compare hashes.
+      - name: Determinism check (zip is byte-reproducible)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/pack.mjs ${{ matrix.tool }} --target ${{ matrix.target }} --out dist2
+          a=$(node scripts/sha256.mjs dist/${{ matrix.tool }}-${{ matrix.target }}.zip)
+          b=$(node scripts/sha256.mjs dist2/${{ matrix.tool }}-${{ matrix.target }}.zip)
+          echo "$a"; echo "$b"
+          [ "$a" = "$b" ] || { echo "::error::zip is not reproducible"; exit 1; }
+
+      - name: web-ext lint (Firefox only)
+        if: matrix.target == 'firefox' && matrix.os == 'ubuntu-latest'
+        run: npx --yes web-ext@8 lint --source-dir dist/unpacked-firefox --warnings-as-errors
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: ${{ matrix.tool }}-${{ matrix.target }}
+          path: dist/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  # Appended here rather than beside gate-inventory, where it belongs by
+  # meaning, for one reason: inserting a job above shifts every `ci.yml:NNN`
+  # citation below it, and this repository cites this file by line in prose that
+  # nothing recomputes. Job order has no effect on execution.
+  selftest:
+    name: Gate self-test (do the gates bite?)
+    runs-on: ubuntu-latest
+    # Like gate-inventory, deliberately NOT a `needs:` of anything, and not a
+    # step inside `gates`: this grades the GATES, not a tool. It has to run on a
+    # push that touches no tool at all — a scripts/-only change is exactly the
+    # push where a gate is most likely to have quietly stopped checking, and it
+    # is also the push where `gates` is skipped for having nothing to grade.
+    #
+    # It is the one call in these workflows that is not `node scripts/<name>.mjs`,
+    # which is why the inventory pattern above spells the extension out: a gate
+    # the inventory cannot see is a gate nobody notices the absence of.
+    #
+    # The suite mutates a throwaway tree under os.tmpdir() and points each gate
+    # at it with --repo-root, so it writes nothing into the checkout.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - name: Every gate must be proven to fail on a real mutation
+        run: node scripts/test/selftest.node.js
