@@ -130,6 +130,130 @@ function collect() {
   return [...new Set(files)].sort();
 }
 
+/* ---------------- the Firefox manifest OVERLAY (RFC 7386) ---------------- */
+/* publish/manifest.firefox.json IS NOT A MANIFEST. Since the overlay conversion
+   it is an RFC 7386 MERGE PATCH — five keys, no `version`, no `default_locale`,
+   deliberately, so that a version bump cannot drift between the two engines. The
+   Firefox manifest is what that patch produces when merged ONTO manifest.json,
+   and that merged object is the only thing this script may grade: it is what
+   ships.
+
+   Reading the patch as a whole manifest is not one bug, it is every check at
+   once, and each one is a true statement about the file and a false statement
+   about the package:
+     · it declares no default_locale  → the R12 build gate refused EVERY Firefox
+       build, at package.node.js's build() — a live packaging gate, not a test
+     · it carries no version          → version parity graded undefined
+     · it spends no __MSG_*__ keys    → key parity graded an empty set
+     · build() wrote the patch VERBATIM into the Firefox zip as manifest.json —
+       a five-key add-on with no name, no icons, no permissions and no locales.
+   The last one never surfaced only because the localisation gate above it kept
+   refusing to build at all. Fixing the gate without fixing the writer would have
+   shipped it.
+
+   The overlay path is READ FROM tool.json (`targets.firefox.overlay`), never
+   hardcoded: tool.json is the monorepo contract that scripts/pack.mjs already
+   reads, and a hardcoded filename would silently degrade this script to grading
+   a file that is no longer the overlay the rest of the repo applies. */
+const TOOL_JSON = path.join(ROOT, 'tool.json');
+const PACK_MJS = path.join(ROOT, '..', '..', 'scripts', 'pack.mjs');
+
+function readJson(p) {
+  try { return { value: JSON.parse(fs.readFileSync(p, 'utf8')) }; }
+  catch (e) { return { error: e && e.message }; }
+}
+
+/* LIFTED VERBATIM from scripts/pack.mjs — the monorepo packer that applies the
+   same overlay to the same tree. Two merges that must agree is a defect waiting
+   to happen, so this copy is not maintained: it is COMPARED. `mergePatchDrift()`
+   below reads pack.mjs's own source and fails the build if the two ever differ,
+   which is the closest a dependency-free CommonJS script can get to importing an
+   ESM function. package.node.js deliberately has no build step and no imports,
+   and `require()` cannot load a .mjs at all. */
+
+/* RFC 7386 §2, all of it: a null member DELETES, an object member merges
+   recursively, anything else replaces. Arrays replace wholesale — which is what
+   lets an overlay state background.scripts at all. */
+function mergePatch(base, patch) {
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const out = (base !== null && typeof base === 'object' && !Array.isArray(base)) ? { ...base } : {};
+  for (const key of Object.keys(patch)) {
+    if (patch[key] === null) delete out[key];
+    else out[key] = mergePatch(out[key], patch[key]);
+  }
+  return out;
+}
+
+/* Comments and whitespace differ freely; the CODE may not. */
+function normalizeFn(src) {
+  return String(src).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/* Returns null when pack.mjs is not reachable from here (this tool packaged on
+   its own), a string when the two implementations differ, and '' when they
+   agree. Never silently "passes" for a file it could not read. */
+function mergePatchDrift() {
+  if (!fs.existsSync(PACK_MJS)) return null;
+  const src = fs.readFileSync(PACK_MJS, 'utf8');
+  const start = src.indexOf('function mergePatch');
+  if (start < 0) return 'scripts/pack.mjs no longer defines a function named mergePatch';
+  let i = src.indexOf('{', start), depth = 0, end = -1;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) { end = i; break; }
+  }
+  if (end < 0) return 'scripts/pack.mjs mergePatch does not close — cannot compare';
+  return normalizeFn(src.slice(start, end + 1)) === normalizeFn(mergePatch)
+    ? '' : 'the copy in publish/package.node.js and the one in scripts/pack.mjs are no longer the same code';
+}
+
+/* The whole Firefox story in one object, so no caller has to re-derive it:
+     { none: true }              tool.json declares no Firefox target — legitimate,
+                                 and it means there is no Firefox package at all
+     { error }                   the overlay is named but unusable — a defect
+     { rel, patch, base, merged} the manifest that actually ships                */
+function firefoxManifest() {
+  const tool = readJson(TOOL_JSON);
+  if (tool.error) {
+    return { error: 'tool.json does not parse (' + tool.error + '). targets.firefox.overlay is where the '
+      + 'Firefox overlay is named, so without it this script cannot know which file to merge — and it must '
+      + 'not guess a filename.' };
+  }
+  const t = (tool.value && tool.value.targets && tool.value.targets.firefox) || null;
+  const rel = t ? t.overlay : undefined;
+  /* A tool with no Firefox target is a legitimate state, not a hole: absent, or
+     an explicit null, means there is no second package to build and nothing to
+     grade. It must not crash, and it must not quietly grade zero checks while
+     printing nothing — main() says so out loud. */
+  if (rel === undefined || rel === null) return { none: true };
+  if (typeof rel !== 'string' || !rel) {
+    return { error: 'tool.json targets.firefox.overlay is ' + JSON.stringify(rel) +
+      '; it must be a path relative to the tool directory, or null for a tool with no Firefox target.' };
+  }
+  const abs = path.join(ROOT, rel);
+  if (!fs.existsSync(abs)) {
+    return { rel, error: rel + ' is named by tool.json targets.firefox.overlay but is not on disk' };
+  }
+  const p = readJson(abs);
+  if (p.error) return { rel, error: rel + ' does not parse — ' + p.error };
+  if (p.value === null || typeof p.value !== 'object' || Array.isArray(p.value)) {
+    return { rel, error: rel + ' parses as ' +
+      (p.value === null ? 'null' : Array.isArray(p.value) ? 'an array' : 'a ' + typeof p.value) +
+      '. An RFC 7386 merge patch is an OBJECT; a top-level null or array REPLACES the whole manifest, '
+      + 'which would ship an add-on carrying no manifest content at all.' };
+  }
+  const base = readJson(path.join(ROOT, 'manifest.json'));
+  if (base.error) return { rel, patch: p.value, error: 'manifest.json does not parse — ' + base.error };
+  return { rel, patch: p.value, base: base.value, merged: mergePatch(base.value, p.value) };
+}
+
+/* The bytes that go into the Firefox zip. Same serialisation scripts/pack.mjs
+   uses, so the two packers produce a byte-identical manifest from one patch. */
+function firefoxManifestBytes(merged) {
+  return Buffer.from(JSON.stringify(merged, null, 2) + '\n', 'utf8');
+}
+
 /* ---------------- the localisation gate (R12), at BUILD time ---------------- */
 /* verifyPackage already refuses a zip whose default_locale has no messages.json.
    That is not enough on its own, because it runs AFTER writeZip: the artifact it
@@ -143,20 +267,58 @@ function collect() {
    Pure by design: it takes the collected file list and the parsed manifests and
    returns human-readable problems. The i18n tier calls it directly with synthetic
    inputs, so the gate itself is GRADED rather than trusted. */
+/* Every manifest that SHIPS, one entry per package — so `mf` is the merged
+   Firefox manifest, never the patch. Callers that legitimately care about the
+   patch itself get it as `.patch` on the same entry (see `patchProblems`, which
+   grades the patch for restating the version — a thing that is only wrong about
+   the PATCH and invisible in the merge). Both are exposed rather than one,
+   because grading either one alone was how this defect happened: the merge is
+   what the store receives, and the patch is what a human edits. */
 function readManifests() {
-  const read = p => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } };
-  return [
-    { label: 'manifest.json', mf: read(path.join(ROOT, 'manifest.json')) },
-    { label: 'publish/manifest.firefox.json', mf: read(path.join(OUT, 'manifest.firefox.json')) }
-  ];
+  const base = readJson(path.join(ROOT, 'manifest.json'));
+  const out = [{ label: 'manifest.json', mf: base.error ? null : base.value }];
+  const ff = firefoxManifest();
+  /* No Firefox target: one package, one manifest. Returning a second entry whose
+     mf is null would report a parse failure for a file nobody claimed exists. */
+  if (ff.none) return out;
+  out.push({
+    label: (ff.rel || 'the Firefox overlay') + ' merged onto manifest.json',
+    mf: ff.merged || null,
+    patch: ff.patch || null,
+    overlayRel: ff.rel || null,
+    error: ff.error || null
+  });
+  return out;
+}
+
+/* Checks that are about the PATCH, not about the manifest it produces. There is
+   exactly one class of them and this is why `.patch` is exposed at all: a merge
+   patch that restates a field it should inherit merges CLEANLY and grades green
+   everywhere — right up to the bump where the two copies disagree and the AMO
+   package silently carries the previous number. That is invisible downstream of
+   the merge by construction, so it has to be asked here. */
+function patchProblems(manifests) {
+  const out = [];
+  for (const m of manifests) {
+    if (!m.patch) continue;
+    for (const key of ['version', 'default_locale']) {
+      if (Object.prototype.hasOwnProperty.call(m.patch, key) && m.patch[key] !== null) {
+        out.push((m.overlayRel || m.label) + ' restates "' + key + '" (' + JSON.stringify(m.patch[key]) +
+          '). An overlay is a merge patch: it must carry only what DIFFERS, and inherit ' + key +
+          ' from manifest.json. While it restates it, every bump has to be right twice and the failure ' +
+          'mode is a package silently carrying the previous value.');
+      }
+    }
+  }
+  return out;
 }
 
 function localeProblems(files, manifests, onDiskOverride) {
   const have = new Set(files);
   const onDisk = onDiskOverride || localeMessageFiles();
   const out = [];
-  for (const { label, mf } of manifests) {
-    if (!mf) { out.push(label + ' does not parse — cannot grade its localisation'); continue; }
+  for (const { label, mf, error } of manifests) {
+    if (!mf) { out.push(error ? label + ': ' + error : label + ' does not parse — cannot grade its localisation'); continue; }
     const dl = mf.default_locale;
     if (dl) {
       const need = '_locales/' + dl + '/messages.json';
@@ -561,8 +723,23 @@ function verifyPackage(zipPath, kind) {
     const guarded = /if\s*\(\s*typeof\s+importScripts\s*===\s*['"]function['"]\s*\)/.test(bgSrc);
     check('packaged background.js guards importScripts', guarded,
       guarded ? 'Firefox loads it as an event page' : 'UNGUARDED — the add-on throws on load in Firefox');
-    check('packaged manifest equals publish/manifest.firefox.json',
-      JSON.stringify(mf) === JSON.stringify(JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.firefox.json'), 'utf8'))));
+    /* Against the MERGED manifest — the overlay applied to manifest.json — not
+       against the overlay file, which is a merge patch and never equals a
+       manifest. Diffing at the key level rather than reporting a bare `false`:
+       "the packaged manifest is not the one this tree produces" is unactionable
+       without knowing WHICH key moved. */
+    const ff = firefoxManifest();
+    if (ff.merged) {
+      const want = ff.merged;
+      const keys = [...new Set([...Object.keys(want), ...Object.keys(mf)])].sort();
+      const diff = keys.filter(k => JSON.stringify(want[k]) !== JSON.stringify(mf[k]));
+      check('packaged manifest equals ' + ff.rel + ' merged onto manifest.json', diff.length === 0,
+        diff.length ? 'differs at: ' + diff.join(', ') + ' — rebuild the package'
+          : keys.length + ' keys, ' + Object.keys(ff.patch).length + ' of them from the overlay');
+    } else {
+      check('the Firefox overlay produces a manifest', false,
+        ff.error || 'tool.json declares no targets.firefox.overlay, yet a Firefox package exists');
+    }
   } else {
     const bgSrc = (entries.get('background.js') || Buffer.alloc(0)).toString('utf8');
     check('Chrome package keeps the plain importScripts calls',
@@ -579,7 +756,8 @@ function verifyPackage(zipPath, kind) {
 if (require.main !== module) {
   module.exports = {
     ROOT, ALLOW, NEVER, MAX_DEPTH,
-    collect, localeMessageFiles, localesViaAllowRules, localeProblems, readManifests, readZip
+    collect, localeMessageFiles, localesViaAllowRules, localeProblems, readManifests, readZip,
+    mergePatch, mergePatchDrift, firefoxManifest, firefoxManifestBytes, patchProblems
   };
   return;
 }
@@ -603,6 +781,41 @@ console.log('FullShot packaging — v' + version + (verifyOnly ? '  (verify only
       ? 'the always-rule is carrying ' + ruleBlind.length + '/' + always.length + ' locale(s) alone — ' +
         'ALLOW/NEVER/MAX_DEPTH no longer see them. The package is still correct; the pattern language is not.'
       : always.length + ' locale(s) reachable by both paths');
+}
+
+/* The overlay, graded as an overlay. Runs in --verify too: these ask questions
+   about the SOURCE, and a verify pass that skipped them would report a green
+   package built from a patch nobody checked. */
+{
+  const ffMain = firefoxManifest();
+  if (ffMain.none) {
+    console.log('  no Firefox target — tool.json declares no targets.firefox.overlay, so this tool has one '
+      + 'package. Nothing below grades a Firefox zip.');
+  } else if (ffMain.error) {
+    check('the Firefox overlay is usable', false, ffMain.error);
+  } else {
+    check('the Firefox overlay is an RFC 7386 merge patch, applied to manifest.json', true,
+      ffMain.rel + ': ' + Object.keys(ffMain.patch).length + ' key(s) over manifest.json\'s ' +
+      Object.keys(ffMain.base).length + ' → ' + Object.keys(ffMain.merged).length +
+      ' shipped, version ' + ffMain.merged.version +
+      (Object.prototype.hasOwnProperty.call(ffMain.patch, 'version') ? ' RESTATED by the overlay' : ' inherited'));
+    const pp = patchProblems(readManifests());
+    if (pp.length) { FAILS += pp.length; pp.forEach(p => console.log('  FAIL  overlay: ' + p)); }
+    else check('the overlay restates nothing it should inherit', true, 'no version, no default_locale');
+  }
+
+  /* One merge, two packers. If this copy and scripts/pack.mjs's ever diverge,
+     the zip this script builds and the zip CI builds stop being the same
+     add-on — and nothing else would notice, because each would be internally
+     consistent. Absence is reported, never treated as agreement. */
+  const drift = mergePatchDrift();
+  if (drift === null) {
+    console.log('  NOTE   merge-patch: scripts/pack.mjs is not reachable from here, so this script\'s copy of '
+      + 'mergePatch could NOT be compared against the monorepo packer\'s. Unverified, not verified.');
+  } else {
+    check('the merge patch is the same implementation scripts/pack.mjs uses', drift === '',
+      drift || 'RFC 7386, byte-identical after comments and whitespace');
+  }
 }
 
 /* A function rather than an inline block so the localisation gate can bail out
@@ -656,7 +869,25 @@ function build() {
   writeZip(chromeZip, chromeEntries);
   console.log('  wrote ' + path.basename(chromeZip));
 
-  const ffManifest = fs.readFileSync(path.join(OUT, 'manifest.firefox.json'));
+  /* THE MANIFEST THAT SHIPS, not the patch that produces it. This line read the
+     overlay's raw bytes and put them in the zip as manifest.json — which after
+     the merge-patch conversion is a five-key add-on with no name, icons,
+     permissions or locales. */
+  const ff = firefoxManifest();
+  if (ff.none) {
+    console.log('  no Firefox target — tool.json declares no targets.firefox.overlay, so ' +
+      path.basename(firefoxZip) + ' is not built. This is a tool with one package, not a skipped build.');
+    return;
+  }
+  if (ff.error) {
+    FAILS++;
+    console.log('  FAIL  the Firefox overlay is unusable: ' + ff.error);
+    console.log('  SKIPPED ' + path.basename(firefoxZip) + ' — a Firefox manifest that cannot be produced '
+      + 'must not be guessed at, and the previous package is left untouched rather than overwritten.');
+    action('BUILD', 'fix the Firefox overlay named by tool.json targets.firefox.overlay, then rebuild');
+    return;
+  }
+  const ffManifest = firefoxManifestBytes(ff.merged);
   const bgRaw = fs.readFileSync(path.join(ROOT, 'background.js'), 'utf8');
   /* Source is Chrome-shaped today, so the guard is applied here at package time —
      the 1.9.11 precedent, except done by script and then verified, instead of by
@@ -693,7 +924,10 @@ function build() {
 if (!verifyOnly) build();
 
 verifyPackage(chromeZip, 'chrome');
-verifyPackage(firefoxZip, 'firefox');
+/* A tool with no Firefox target has no Firefox zip to grade, and demanding one
+   would report a missing package as a packaging defect. It is announced above,
+   so this is a skip anybody can see rather than a check that quietly evaporates. */
+if (!firefoxManifest().none) verifyPackage(firefoxZip, 'firefox');
 
 console.log('\n' + (FAILS ? FAILS + ' FAIL' : 'ALL PASS') + ' — packaging + reference integrity');
 if (ACTIONS.length) {
