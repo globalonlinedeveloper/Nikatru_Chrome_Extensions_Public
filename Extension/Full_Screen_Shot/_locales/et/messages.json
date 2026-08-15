@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Jäädvusta kogu leht, nähtav ala, valitud piirkond või üksik element. Redigeeri, lisa märkusi ja ekspordi vormingus PNG, JPEG, WebP või PDF koos nutika lehtedeks jagamisega."
+    "message": "Jäädvusta kogu leht, nähtav ala, valitud piirkond või element. Redigeeri, lisa märkusi ja ekspordi PNG, JPEG, WebP või PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – jäädvusta leht (Alt+Shift+P)"

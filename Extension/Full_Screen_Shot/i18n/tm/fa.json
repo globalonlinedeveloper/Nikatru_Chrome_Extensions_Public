@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - عکس‌برداری از کل صفحه",
   "appShortName": "FullShot",
-  "appDescription": "از کل صفحه، بخش قابل مشاهده، یک ناحیه یا هر عنصری عکس بگیرید. ویرایش و یادداشت‌گذاری کنید و با تقسیم هوشمند صفحه به PNG، JPEG، WebP یا PDF خروجی بگیرید.",
+  "appDescription": "از کل صفحه، بخش قابل مشاهده، یک ناحیه یا هر عنصری عکس بگیرید. ویرایش و یادداشت‌گذاری کنید و به PNG، JPEG، WebP یا PDF خروجی بگیرید.",
   "actionDefaultTitle": "FullShot - عکس‌برداری از صفحه (Alt+Shift+P)",
   "commandCaptureFullPage": "عکس‌برداری از کل صفحه",
   "commandCaptureVisible": "عکس‌برداری از بخش قابل مشاهده",

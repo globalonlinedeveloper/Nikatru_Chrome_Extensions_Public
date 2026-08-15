@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – teljes oldalas képernyőkép",
   "appShortName": "FullShot",
-  "appDescription": "Rögzítse a teljes oldalt, a látható részt, egy kijelölést vagy bármelyik elemet. Szerkesztés, jelölés és mentés PNG, JPEG, WebP vagy PDF formátumban.",
+  "appDescription": "Rögzítse a teljes oldalt, a látható részt, egy kijelölést vagy elemet. Szerkessze és mentse PNG, JPEG, WebP vagy PDF formátumban.",
   "actionDefaultTitle": "FullShot – oldal rögzítése (Alt+Shift+P)",
   "commandCaptureFullPage": "Teljes oldal rögzítése",
   "commandCaptureVisible": "Látható terület rögzítése",

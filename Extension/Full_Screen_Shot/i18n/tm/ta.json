@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - முழுப் பக்கத் திரைப்பிடிப்பு",
   "appShortName": "FullShot",
-  "appDescription": "முழுப் பக்கம், தெரியும் பகுதி, தேர்ந்த பகுதி அல்லது உறுப்பைப் பிடியுங்கள். திருத்தி, குறிப்பிட்டு, PNG, JPEG, WebP அல்லது PDF ஆக ஏற்றுமதி செய்யுங்கள்.",
+  "appDescription": "முழுப் பக்கம், தெரியும் பகுதி, தேர்ந்த பகுதி, உறுப்பைப் பிடியுங்கள். திருத்தி, குறிப்பிட்டு PNG, JPEG, WebP, PDF ஆக சேமிக்கவும்.",
   "actionDefaultTitle": "FullShot - பக்கத்தைப் பிடி (Alt+Shift+P)",
   "commandCaptureFullPage": "முழுப் பக்கத்தைப் பிடி",
   "commandCaptureVisible": "தெரியும் பகுதியைப் பிடி",

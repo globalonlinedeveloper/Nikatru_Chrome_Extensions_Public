@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - మొత్తం పేజీ స్క్రీన్ క్యాప్చర్",
   "appShortName": "FullShot",
-  "appDescription": "మొత్తం పేజీ, కనిపించే ప్రాంతం, ఎంచుకున్న ప్రాంతం లేదా ఏ మూలకాన్నైనా క్యాప్చర్ చేయండి. సవరించి PNG, JPEG, WebP లేదా PDF గా ఎగుమతి చేయండి.",
+  "appDescription": "మొత్తం పేజీ, కనిపించే ప్రాంతం, ఎంచుకున్న ప్రాంతం, ఏ మూలకాన్నైనా క్యాప్చర్ చేయండి. సవరించి PNG, JPEG, WebP, PDF గా ఎగుమతి చేయండి.",
   "actionDefaultTitle": "FullShot - పేజీని క్యాప్చర్ చేయి (Alt+Shift+P)",
   "commandCaptureFullPage": "మొత్తం పేజీని క్యాప్చర్ చేయి",
   "commandCaptureVisible": "కనిపించే ప్రాంతాన్ని క్యాప్చర్ చేయి",

@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Capturez la page entière, la zone visible, une région ou n'importe quel élément. Modifiez, annotez et exportez en PNG, JPEG, WebP ou PDF avec découpage intelligent des pages."
+    "message": "Capturez la page entière, la zone visible, une région ou un élément. Modifiez, annotez et exportez en PNG, JPEG, WebP ou PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – Capturer la page (Alt+Shift+P)"

@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "التقط الصفحة كاملة أو المنطقة الظاهرة أو منطقة محددة أو أي عنصر. حرّر وعلّق وصدّر بصيغة PNG أو JPEG أو WebP أو PDF مع تقسيم ذكي للصفحات."
+    "message": "التقط الصفحة كاملة أو المنطقة الظاهرة أو منطقة محددة أو أي عنصر. حرّر وعلّق وصدّر بصيغة PNG أو JPEG أو WebP أو PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot — التقاط الصفحة (Alt+Shift+P)"

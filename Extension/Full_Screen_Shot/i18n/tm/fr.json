@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – Capture d'écran de page entière",
   "appShortName": "FullShot",
-  "appDescription": "Capturez la page entière, la zone visible, une région ou n'importe quel élément. Modifiez, annotez et exportez en PNG, JPEG, WebP ou PDF avec découpage intelligent des pages.",
+  "appDescription": "Capturez la page entière, la zone visible, une région ou un élément. Modifiez, annotez et exportez en PNG, JPEG, WebP ou PDF.",
   "actionDefaultTitle": "FullShot – Capturer la page (Alt+Shift+P)",
   "commandCaptureFullPage": "Capturer la page entière",
   "commandCaptureVisible": "Capturer la zone visible",

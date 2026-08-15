@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Capture full page, visible area, region, or any element. Edit, annotate, and export as PNG, JPEG, WebP, or PDF with smart page splitting."
+    "message": "Capture full page, visible area, region, or any element. Edit, annotate, and export as PNG, JPEG, WebP, or PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot - Capture page (Alt+Shift+P)"

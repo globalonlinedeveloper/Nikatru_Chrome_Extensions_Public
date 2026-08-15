@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – snimka cijele stranice",
   "appShortName": "FullShot",
-  "appDescription": "Snimite cijelu stranicu, vidljivi dio, isječak ili element. Uredite, označite i izvezite u PNG, JPEG, WebP ili PDF uz pametno dijeljenje.",
+  "appDescription": "Snimite cijelu stranicu, vidljivi dio, isječak ili element. Uredite, označite i izvezite u PNG, JPEG, WebP ili PDF.",
   "actionDefaultTitle": "FullShot – snimi stranicu (Alt+Shift+P)",
   "commandCaptureFullPage": "Snimi cijelu stranicu",
   "commandCaptureVisible": "Snimi vidljivi dio",

@@ -1,7 +1,7 @@
 {
   "_comment": "DELTA LOCALE, chained pt_PT -> pt_BR. European Portuguese. The systematic differences from Brazilian: gerund -> 'a + infinitive' (a carregar, not carregando), 'ecrã' not 'tela', 'ficheiro' not 'arquivo', 'separador' not 'aba', 'rato' not 'mouse', 'guardar' not 'salvar', 'transferir' not 'baixar', 'utilizador' not 'usuário', 'som' of 'apagar' rather than 'excluir'. The CPF in the redaction string becomes the NIF. Chrome ships pt_BR and pt_PT with NO bare 'pt', so pt_BR is the base of the chain by choice, not by locale hierarchy.",
   "appName": "FullShot – Captura de página inteira",
-  "appDescription": "Capture a página inteira, a área visível, uma região ou qualquer elemento. Edite, anote e exporte em PNG, JPEG, WebP ou PDF com divisão inteligente de páginas.",
+  "appDescription": "Capture a página inteira, a área visível, uma região ou qualquer elemento. Edite, anote e exporte em PNG, JPEG, WebP ou PDF.",
   "popupModeVisibleSub": "Apenas o que está no ecrã",
   "popupModeDelayedSub": "Página inteira após a contagem decrescente",
   "popupNoActiveTab": "Não foi encontrado nenhum separador ativo.",

@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Tag billeder af hele siden, det synlige område, et udsnit eller et enkelt element. Rediger, tilføj noter og eksportér som PNG, JPEG, WebP eller PDF med intelligent sideopdeling."
+    "message": "Tag billede af hele siden, det synlige område, et udsnit eller et element. Rediger, marker og gem som PNG, JPEG, WebP eller PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – tag billede af siden (Alt+Shift+P)"

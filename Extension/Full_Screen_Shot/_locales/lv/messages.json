@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Uzņemiet visu lapu, redzamo apgabalu, izvēlētu apgabalu vai jebkuru elementu. Rediģējiet, pievienojiet anotācijas un eksportējiet PNG, JPEG, WebP vai PDF formātā ar viedu sadalīšanu lappusēs."
+    "message": "Uzņemiet visu lapu, redzamo apgabalu, izvēlētu apgabalu vai elementu. Rediģējiet, anotējiet un eksportējiet PNG, JPEG, WebP, PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – uzņemt lapu (Alt+Shift+P)"

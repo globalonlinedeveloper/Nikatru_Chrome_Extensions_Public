@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – viso puslapio ekrano kopija",
   "appShortName": "FullShot",
-  "appDescription": "Fotografuokite visą puslapį, matomą sritį, pasirinktą sritį arba bet kurį elementą. Redaguokite, žymėkite ir eksportuokite PNG, JPEG, WebP ar PDF formatu su išmaniuoju skaidymu į puslapius.",
+  "appDescription": "Fotografuokite visą puslapį, matomą sritį, pasirinktą plotą ar elementą. Redaguokite, žymėkite, eksportuokite PNG, JPEG, WebP, PDF.",
   "actionDefaultTitle": "FullShot – fotografuoti puslapį (Alt+Shift+P)",
   "commandCaptureFullPage": "Fotografuoti visą puslapį",
   "commandCaptureVisible": "Fotografuoti matomą sritį",

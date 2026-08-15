@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Ta bilde av hele siden, det synlige området, et utsnitt eller et enkelt element. Rediger, sett på merknader og eksporter som PNG, JPEG, WebP eller PDF med smart sidedeling."
+    "message": "Ta bilde av hele siden, det synlige området, et utsnitt eller et element. Rediger, merk og eksporter som PNG, JPEG, WebP eller PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – ta bilde av siden (Alt+Shift+P)"

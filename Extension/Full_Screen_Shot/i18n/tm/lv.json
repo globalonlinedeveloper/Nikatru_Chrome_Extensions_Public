@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – visas lapas ekrānuzņēmums",
   "appShortName": "FullShot",
-  "appDescription": "Uzņemiet visu lapu, redzamo apgabalu, izvēlētu apgabalu vai jebkuru elementu. Rediģējiet, pievienojiet anotācijas un eksportējiet PNG, JPEG, WebP vai PDF formātā ar viedu sadalīšanu lappusēs.",
+  "appDescription": "Uzņemiet visu lapu, redzamo apgabalu, izvēlētu apgabalu vai elementu. Rediģējiet, anotējiet un eksportējiet PNG, JPEG, WebP, PDF.",
   "actionDefaultTitle": "FullShot – uzņemt lapu (Alt+Shift+P)",
   "commandCaptureFullPage": "Uzņemt visu lapu",
   "commandCaptureVisible": "Uzņemt redzamo apgabalu",

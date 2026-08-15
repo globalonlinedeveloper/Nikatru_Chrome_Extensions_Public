@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Cattura schermo a pagina intera",
   "appShortName": "=",
-  "appDescription": "Cattura pagina intera, area visibile, regione o elemento. Modifica, annota ed esporta in PNG, JPEG, WebP o PDF con divisione intelligente.",
+  "appDescription": "Cattura pagina intera, area visibile, regione o elemento. Modifica, annota ed esporta in PNG, JPEG, WebP o PDF.",
   "actionDefaultTitle": "FullShot - Cattura la pagina (Alt+Shift+P)",
   "commandCaptureFullPage": "Cattura la pagina intera",
   "commandCaptureVisible": "Cattura l'area visibile",

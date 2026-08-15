@@ -8,7 +8,7 @@
     "description": "manifest.json `short_name`, and the brand word in the popup header and every page topbar. This is the product name. Keep it as-is in Latin-script locales. Only transliterate for locales that do not use Latin script (ar, fa, he, ja, ko, th, zh) IF that is the local convention; when in doubt, leave it as \"FullShot\"."
   },
   "appDescription": {
-    "message": "Capture full page, visible area, region, or any element. Edit, annotate, and export as PNG, JPEG, WebP, or PDF with smart page splitting.",
+    "message": "Capture full page, visible area, region, or any element. Edit, annotate, and export as PNG, JPEG, WebP, or PDF.",
     "description": "manifest.json `description`. The one-line store listing summary; Chrome truncates around 132 characters, so keep the translation short. PNG, JPEG, WebP and PDF are file format names and must be copied through untranslated. NOTE: this message is resolved by the browser at manifest-load time, so it deliberately carries no placeholders."
   },
   "actionDefaultTitle": {

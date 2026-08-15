@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Screenshot ng Buong Page",
   "appShortName": "FullShot",
-  "appDescription": "Kunan ang buong page, ang nakikitang bahagi, isang piniling bahagi, o kahit anong elemento. I-edit, lagyan ng anotasyon, at i-export bilang PNG, JPEG, WebP, o PDF na may matalinong paghahati ng page.",
+  "appDescription": "Kunan ang buong page, nakikitang bahagi, piniling bahagi, o elemento. I-edit, anotahan, at i-export bilang PNG, JPEG, WebP, o PDF.",
   "actionDefaultTitle": "FullShot - Kunan ang page (Alt+Shift+P)",
   "commandCaptureFullPage": "Kunan ang buong page",
   "commandCaptureVisible": "Kunan ang nakikitang bahagi",

@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Kaappaa koko sivu, näkyvä alue, valittu alue tai yksittäinen elementti. Muokkaa, lisää merkinnät ja vie muodossa PNG, JPEG, WebP tai PDF älykkäällä sivunjaolla."
+    "message": "Kaappaa koko sivu, näkyvä alue, valittu alue tai elementti. Muokkaa, lisää merkinnät ja vie muodossa PNG, JPEG, WebP tai PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – kaappaa sivu (Alt+Shift+P)"

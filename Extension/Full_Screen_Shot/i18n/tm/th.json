@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - จับภาพหน้าจอเว็บทั้งหน้า",
   "appShortName": "FullShot",
-  "appDescription": "จับภาพทั้งหน้า พื้นที่ที่มองเห็น พื้นที่ที่เลือก หรือองค์ประกอบใดก็ได้ แก้ไข ใส่คำอธิบาย แล้วส่งออกเป็น PNG, JPEG, WebP หรือ PDF พร้อมการแบ่งหน้าอัจฉริยะ",
+  "appDescription": "จับภาพทั้งหน้า พื้นที่ที่มองเห็น พื้นที่ที่เลือก หรือองค์ประกอบใดก็ได้ แก้ไข ใส่คำอธิบาย แล้วส่งออกเป็น PNG, JPEG, WebP หรือ PDF",
   "actionDefaultTitle": "FullShot - จับภาพหน้าเว็บ (Alt+Shift+P)",
   "commandCaptureFullPage": "จับภาพทั้งหน้า",
   "commandCaptureVisible": "จับภาพพื้นที่ที่มองเห็น",

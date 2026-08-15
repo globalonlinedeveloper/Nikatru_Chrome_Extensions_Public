@@ -11,6 +11,43 @@ breaking change becomes `core/v2/` beside it rather than a new number here.
 > `core-v0.1.0` starts no workflow run. An empty `gh run list` after that push is the designed behaviour,
 > not a stuck queue.
 
+## [Unreleased]
+
+### Added — `core/test/`, which clears the 0.1.0 known-red
+
+No module changed, so the version does not move: the number is a claim about how much of the `v1` surface
+exists, and the surface is the same three files. What changed is that they are now graded.
+
+- `core/test/jobs.node.js` (61 assertions), `core/test/settings.node.js` (66),
+  `core/test/storage.node.js` (79) — one per shipped module, loading the real
+  `core/v1/<module>.js` off disk into a fresh `vm` context on bare Node. No npm, no browser. The only
+  fakes are `chrome.storage`, IndexedDB and `navigator.storage`, and each records its traffic so *did it
+  write?* is an assertion rather than an inference.
+- `core/test/harness.js` — those fakes, plus the scoreboard. **Not named `*.node.js` on purpose:** the
+  `core sims` job globs `core/test/*.node.js` and runs every match, so a helper with that suffix would be
+  executed as a sim and its zero assertions would read as a pass.
+- `core/test/coverage.node.js` (40 assertions) — the guard on the guards, and the reason a token fix would
+  not have been one. `ci.yml:254` tests `[ ${#sims[@]} -eq 0 ]`: correct for *no sims at all*, useless
+  afterwards, because one file turns the job green however many modules land later. This enforces
+  one-sim-per-module, derives what needs a sim from `core.json` (`status: built` and not
+  `"shipped": false`) rather than from a list, re-derives every number in `counts`, and recomputes the
+  `sha256` behind every *promoted, byte for byte* claim — all six still matched.
+
+Each sim carries an **executed** failing case rather than a remembered one, which is what admission rule 6
+is actually asking for. Every sim ends in a `TEETH` section that mutates the real source text, reloads the
+mutant and asserts the matching check goes red; a mutation that changes nothing is reported as a failure of
+*the sim*, and a mutation whose search string stops matching throws instead of passing quietly.
+
+### Not changed, deliberately
+
+- **`.github/workflows/ci.yml`.** The empty-glob failure is correct as written and was left alone.
+- **`core/v1/**`.** These are byte-for-byte promotions with their source `sha256` on record; editing one to
+  make a test pass would break the invariant that makes the promotion checkable. One real edge was found
+  and is **pinned rather than fixed**: `SKDB.estimate()` reports an explicitly `null` quota as `0` instead
+  of `null`, because `Number(null)` is `0` and `0` is finite, so a summary line renders "0 bytes" where it
+  means "unknown". Every other unusable value in that function lands on `null`. The fix belongs upstream in
+  `templates/tool/lib/storage.js`, in its own change, followed by a re-promotion.
+
 ## [0.1.0] — 2026-08-14
 
 The directory exists and holds only code that already existed and was read. Nothing here was written from
@@ -77,19 +114,21 @@ figures and the rule that produces them are in `core.json` → `counts`; the 11 
 `"module"` field on each specified entry, not typed beside the list. What each will own is in `README.md`
 and in `core.json` under `modules[*].owns`.
 
-### 🔴 Known-red — `core/test/` is absent and CI says so
+### 🔴 Known-red at 0.1.0 — `core/test/` was absent and CI said so *(cleared 2026-08-15, see below)*
 
-Admission rule 6 is *every core module ships with a Node sim in `core/test/`*. None of the three does, and
-`core/test/` does not exist. The `core sims` job in `.github/workflows/ci.yml` therefore lints `core/`
-(6 files, passing), globs `core/test/*.node.js`, finds none, prints
+Admission rule 6 is *every core module ships with a Node sim in `core/test/`*. At 0.1.0 none of the three
+did, and `core/test/` did not exist. The `core sims` job in `.github/workflows/ci.yml` therefore linted
+`core/` (6 files, passing), globbed `core/test/*.node.js`, found none, and **exited 1**. That job is
+written so an empty glob fails rather than passes, because a loop over zero files that exits 0 is
+indistinguishable from a passing run — which is the exact trap this repo's gates are built to refuse. The
+red was correct.
 
-```
-::error::core/ exists but core/test/ holds no sims — every core module ships with one.
-```
-
-and **exits 1**. That job is written so an empty glob fails rather than passes, because a loop over zero
-files that exits 0 is indistinguishable from a passing run — which is the exact trap this repo's gates are
-built to refuse. The red is correct. Wire the sims to clear it.
+> **A misquote that stood here, and in `core/README.md` and `core/core.json`, until 2026-08-15.** All three
+> presented `::error::core/ exists but core/test/ holds no sims — every core module ships with one.` as a
+> verbatim quotation of the workflow. It is a paraphrase. The real message at `ci.yml:255` continues
+> *"…because core has N consumers and a regression there is N outages. core.json's own gaps list names
+> this; it is a known gap, not a surprise, and it is red until the sims exist."* A paraphrase in quotation
+> marks is worse than no quotation: it is what a reader greps for and does not find.
 
 ### Notes on this release
 

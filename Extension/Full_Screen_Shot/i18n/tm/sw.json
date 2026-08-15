@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Picha ya Skrini ya Ukurasa Mzima",
   "appShortName": "FullShot",
-  "appDescription": "Nasa ukurasa mzima, eneo linaloonekana, sehemu uliyochagua au kipengele chochote. Hariri, weka maelezo na hamisha kama PNG, JPEG, WebP au PDF pamoja na ugawaji makini wa kurasa.",
+  "appDescription": "Nasa ukurasa mzima, eneo linaloonekana, sehemu uliyochagua au kipengele. Hariri, weka maelezo na hamisha PNG, JPEG, WebP au PDF.",
   "actionDefaultTitle": "FullShot - Nasa ukurasa (Alt+Shift+P)",
   "commandCaptureFullPage": "Nasa ukurasa mzima",
   "commandCaptureVisible": "Nasa eneo linaloonekana",

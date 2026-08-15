@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - संपूर्ण पेजचा स्क्रीन कॅप्चर",
   "appShortName": "FullShot",
-  "appDescription": "संपूर्ण पेज, दिसणारा भाग, निवडलेला भाग किंवा कोणताही घटक कॅप्चर करा. टिपा जोडा आणि स्मार्ट पेज विभाजनासह PNG, JPEG, WebP किंवा PDF मध्ये एक्सपोर्ट करा.",
+  "appDescription": "संपूर्ण पेज, दिसणारा भाग, निवडलेला भाग किंवा कोणताही घटक कॅप्चर करा. टिपा जोडा आणि PNG, JPEG, WebP किंवा PDF मध्ये एक्सपोर्ट करा.",
   "actionDefaultTitle": "FullShot - पेज कॅप्चर करा (Alt+Shift+P)",
   "commandCaptureFullPage": "संपूर्ण पेज कॅप्चर करा",
   "commandCaptureVisible": "दिसणारा भाग कॅप्चर करा",

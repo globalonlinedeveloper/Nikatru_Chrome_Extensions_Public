@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – Ganze Seite als Screenshot",
   "appShortName": "FullShot",
-  "appDescription": "Ganze Seite, sichtbaren Bereich, Ausschnitt oder ein einzelnes Element aufnehmen. Bearbeiten, kommentieren und als PNG, JPEG, WebP oder PDF mit intelligenter Seitenteilung exportieren.",
+  "appDescription": "Ganze Seite, sichtbaren Bereich, Ausschnitt oder Element aufnehmen. Bearbeiten, markieren, als PNG, JPEG, WebP oder PDF speichern.",
   "actionDefaultTitle": "FullShot – Seite aufnehmen (Alt+Shift+P)",
   "commandCaptureFullPage": "Ganze Seite aufnehmen",
   "commandCaptureVisible": "Sichtbaren Bereich aufnehmen",
