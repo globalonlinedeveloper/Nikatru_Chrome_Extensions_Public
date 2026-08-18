@@ -60,7 +60,7 @@ jobs:
     # every job wait on a complete toolchain would mean the day one script lands
     # nothing else has been exercised in weeks.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Every gate script these workflows call must exist
         shell: bash
         run: |
@@ -99,7 +99,7 @@ jobs:
       tools: ${{ steps.set.outputs.tools }}
       count: ${{ steps.set.outputs.count }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
@@ -218,7 +218,7 @@ jobs:
     name: Secret scan (full tree)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - run: node scripts/secret-scan.mjs .
@@ -231,7 +231,7 @@ jobs:
     name: catalogue
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       # Delete-first. An `up to date` over a file nobody regenerated is the
@@ -255,7 +255,7 @@ jobs:
     name: core sims
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
 
@@ -295,7 +295,7 @@ jobs:
       matrix:
         tool: ${{ fromJSON(needs.discover.outputs.tools) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - name: Syntax check every shipped script
@@ -318,7 +318,7 @@ jobs:
         node: ['22', '24']
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ matrix.node }}' }
 
@@ -358,7 +358,7 @@ jobs:
     # firefox leg is red for a reason the tree already declares, and the right
     # fix is the overlay, not a matrix that quietly stops building Firefox.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
 
@@ -419,7 +419,7 @@ jobs:
     # The suite mutates a throwaway tree under os.tmpdir() and points each gate
     # at it with --repo-root, so it writes nothing into the checkout.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - name: Every gate must be proven to fail on a real mutation
