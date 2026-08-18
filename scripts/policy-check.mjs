@@ -1169,6 +1169,14 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
      and is the only tool with real Firefox zips). */
   const ffSurface = (typeof ffOverlayRel === 'string' && ffOverlayRel) || hasFfManifest || ffZips.length > 0;
 
+  /* The id publish/identity.json IMPLIES, or null when it cannot imply one.
+     Set below, consumed by the Firefox-manifest limb further down. It exists
+     because identity.json and manifest.firefox.json are TWO COPIES OF ONE FACT
+     for any tool without publish/bump-version.mjs to derive the second from the
+     first -- and fullshot is exactly that tool. Nothing compared them until
+     2026-08-18. */
+  let derivedGeckoId = null;
+
   const idRel = 'publish/identity.json';
   const idAbs = path.join(tool.dirAbs, idRel);
   if (fs.existsSync(idAbs)) {
@@ -1198,6 +1206,8 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
           'stamps the literal id "' + tool.id + '@undefined", which is not a placeholder any packager\n' +
           'recognises, so nothing downstream stops it. Set a domain you control, then run:\n' +
           '  node publish/bump-version.mjs --sync   (from ' + tool.rel + ')');
+      } else if (typeof id.slug === 'string' && id.slug) {
+        derivedGeckoId = id.slug + '@' + od;
       }
     }
   } else if (ffSurface) {
@@ -1227,7 +1237,24 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
         r.owner('the Firefox add-on id is ' + (gid ? 'a placeholder ("' + gid + '")' : 'not set') + ' in ' + ffRel,
           'Permanent from the moment AMO signs it. Do not upload this package to AMO until it names a\n' +
           'domain you control.' + (ffZips.length ? '\n' + ffZips.length + ' -firefox.zip file(s) are already built in publish/ and carry it.' : ''));
-      } else r.pass('the Firefox add-on id is set', gid);
+      } else if (derivedGeckoId && gid !== derivedGeckoId) {
+        /* TWO COPIES OF ONE FACT, AND THIS IS THE ONLY THING THAT COMPARES THEM.
+           `node publish/bump-version.mjs --sync` derives the manifest from
+           identity.json and refuses when they disagree -- but that script comes
+           from templates/tool/ and fullshot, the one tool in this repo with a
+           real Firefox surface, does not carry it. So for fullshot the sync
+           check has never run, and editing either file alone was silent.
+           A disagreement here is FATAL rather than an owner action: both values
+           are real domains, so no placeholder test catches it, and the one that
+           reaches AMO is permanent. */
+        r.fail('the Firefox add-on id agrees with publish/identity.json',
+          ffRel + ' carries gecko.id "' + gid + '" but ' + idRel + ' implies "' + derivedGeckoId + '".' + '\n' +
+          'These are two copies of one fact. Both look real, so no placeholder check catches the\n' +
+          'disagreement, and AMO fixes whichever reaches it FIRST -- permanently. Where a tool carries\n' +
+          'publish/bump-version.mjs, run `node publish/bump-version.mjs --sync` from ' + tool.rel + ';\n' +
+          'this tool does not, so edit ' + ffRel + ' to match ' + idRel + ' by hand, or change both.');
+      } else r.pass('the Firefox add-on id is set', gid +
+        (derivedGeckoId ? ' -- and agrees with ' + idRel : ''));
     }
   }
 

@@ -589,7 +589,7 @@ if (r.fails.length === 0) {
     if (golden.version === version) {
       if (changed.length || added.length) {
         r.warn('this build differs from the artifact already packaged as v' + version,
-          golden.name + ' is the tracked golden master for THIS version, and the tree has moved since:\n' +
+          golden.name + ' is the previously built package for THIS version, and the tree has moved since:\n' +
           (changed.length ? '  ' + changed.length + ' file(s) changed: ' + show(changed) + '\n' : '') +
           (added.length ? '  ' + added.length + ' file(s) added: ' + show(added) + '\n' : '') +
           'Two different packages under one version number is unrecoverable in public — the store keeps\n' +
