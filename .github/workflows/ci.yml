@@ -223,6 +223,34 @@ jobs:
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - run: node scripts/secret-scan.mjs .
 
+  catalogue:
+    # The catalogue is a PUBLISHED INTERFACE, not an internal file: the storefront
+    # (Project_Web_Presence) fetches catalog/extensions.json over https and byte-
+    # compares its vendored copy against it. So the bytes here are somebody else's
+    # build input, and a hand-edit is their red build, not our merge conflict.
+    name: catalogue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      # Delete-first. An `up to date` over a file nobody regenerated is the
+      # vacuous pass: --check would compare the committed bytes against a
+      # generator that was never asked to run.
+      - name: Delete the catalogue so the publisher has to produce it
+        run: rm -f catalog/extensions.json
+      - run: node scripts/publish-catalog.mjs
+      - name: The publisher actually wrote it
+        run: test -s catalog/extensions.json
+      - name: Catalogue must equal a fresh publish from the tool.json files
+        run: git diff --exit-code -- catalog/extensions.json
+      # Two different questions, and neither implies the other: the lane above
+      # asks whether these bytes are what tool.json derives; this one asks whether
+      # what they DESCRIBE is sound. `--check` cannot see an empty catalogue and
+      # this cannot see a stale one.
+      - name: The catalogue describes something real
+        run: node scripts/check-catalog.mjs
+
   core:
     name: core sims
     runs-on: ubuntu-latest
