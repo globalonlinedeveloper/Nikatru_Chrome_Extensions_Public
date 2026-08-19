@@ -225,7 +225,7 @@ jobs:
 
   catalogue:
     # The catalogue is a PUBLISHED INTERFACE, not an internal file: the storefront
-    # (Project_Web_Presence) fetches catalog/extensions.json over https and byte-
+    # (Nikatru_Storefront_Public - repointed 2026-08-19) fetches catalog/extensions.json over https and byte-
     # compares its vendored copy against it. So the bytes here are somebody else's
     # build input, and a hand-edit is their red build, not our merge conflict.
     name: catalogue

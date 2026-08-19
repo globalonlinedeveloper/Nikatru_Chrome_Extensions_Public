@@ -84,7 +84,7 @@ package-lock.json.bak
 coverage/
 
 # ── owner-private material kept OUT of a public repo ────────────────────
-# These live in Project_Cross_browser_Extensions_Private.
+# These live in Nikatru_Chrome_Extensions_Private (repointed 2026-08-19; it was Project_Cross_browser_Extensions_Private until the owner renamed all five repos).
 #
 # 🔴 `private/` IS THAT REPOSITORY, CLONED IN PLACE — a separate git repo nested
 # inside this one, the same arrangement the Flutter product uses for company/ and

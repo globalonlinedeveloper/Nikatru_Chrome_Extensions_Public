@@ -11,7 +11,7 @@
 
    gen-catalog.mjs writes a table into README.md — a catalogue for a HUMAN
    reading this repository. This writes catalog/extensions.json — a catalogue for
-   a MACHINE in another repository. The storefront (Project_Web_Presence) fetches
+   a MACHINE in another repository. The storefront (Nikatru_Storefront_Public) fetches
    this path over https and byte-compares its vendored copy against it, so the
    bytes here are a published interface, not an internal convenience.
 
@@ -44,7 +44,7 @@
        status = "preview"  otherwise
 
    The published vocabulary is {live, preview} because that is what the sibling
-   catalogue publishes (Project_Cross_Platform_Apps catalog/apps.json, graded by
+   catalogue publishes (Nikatru_Android_Apps_Public catalog/apps.json, graded by
    its assert-catalog-contract.mjs) and the storefront reads both with one
    reader. A third spelling would be silently skipped by every consumer while
    looking deliberate here.
@@ -289,7 +289,7 @@ const existing = existingBytes === null
 /* Named once so the --check failure and the rewrite notice cannot drift apart. */
 const BOM_WHY =
   'The first three bytes of ' + outRel + ' are EF BB BF — a UTF-8 byte order mark — before the opening `[`.\n' +
-  'This file is a published interface: Project_Web_Presence fetches these exact bytes over https and\n' +
+  'This file is a published interface: Nikatru_Storefront_Public fetches these exact bytes over https and\n' +
   'byte-compares its vendored copy against them. `JSON.parse` throws on a leading U+FEFF in every path\n' +
   'Node offers (string and Buffer alike), so with the BOM present the storefront cannot read this\n' +
   'catalogue at all — it reports "not valid JSON", vendors nothing, and renders no extensions.\n' +
