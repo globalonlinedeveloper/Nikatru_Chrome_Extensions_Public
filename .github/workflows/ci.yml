@@ -306,6 +306,26 @@ jobs:
         run: node scripts/check-core-sync.mjs ${{ matrix.tool }}
       - name: Version agreement (manifest ↔ CHANGELOG)
         run: node scripts/check-version.mjs ${{ matrix.tool }}
+      # ── THE STORE GATE ON THE BUILT PACKAGE, NOT ON THE SOURCE ─────────────
+      # policy-check above compares publish/manifest.firefox.json's gecko.id to
+      # publish/identity.json and passes — correctly. What nothing asked until
+      # 2026-08-20 is what is inside a package that was BUILT. Measured that day:
+      # six -firefox.zip in Extension/Full_Screen_Shot/publish/ carry
+      # `fullshot@REPLACE-WITH-YOUR-DOMAIN.example` while the source carries
+      # `fullshot@nikatru.com`. The placeholder PASSES AMO validation, and
+      # Mozilla's docs say a guid "cannot be restored and will forever be
+      # unusable for submission" — so the failure is an ACCEPTED upload that
+      # permanently misnames the add-on, not a rejected one somebody retries.
+      #
+      # ⚠️ THIS STEP GRADES ZERO PACKAGES IN CI AND SAYS SO IN ITS OUTPUT.
+      # Extension/Full_Screen_Shot/.gitignore ignores `*.zip`, so a runner's
+      # checkout contains none. It is here for the run AFTER `package` builds
+      # them locally and for the honest zero — the gate prints the count on every
+      # run precisely so "0 packages, clean" cannot be misread as "12 clean".
+      # Its real enforcement surface is a developer machine; that is stated in
+      # the script's header rather than left to be discovered.
+      - name: The BUILT store packages carry the right add-on identity
+        run: node scripts/check-store-packages.mjs ${{ matrix.tool }}
 
   sims:
     name: sims · ${{ matrix.tool }} · node ${{ matrix.node }}
@@ -386,6 +406,25 @@ jobs:
           b=$(node scripts/sha256.mjs dist2/${{ matrix.tool }}-${{ matrix.target }}.zip)
           echo "$a"; echo "$b"
           [ "$a" = "$b" ] || { echo "::error::zip is not reproducible"; exit 1; }
+
+      # ── THE STORE-IDENTITY GATE, ON THE ZIP THIS JOB JUST BUILT ────────────
+      # 🔴 THIS IS THE ONE PLACE IN CI WHERE THE SUBJECT REALLY EXISTS. Store
+      # packages are gitignored, so the same guard in the `gates` job grades zero
+      # of them and says so; here `dist/` holds a package that was built four
+      # steps ago, so the check is about bytes rather than about a source file
+      # that describes them.
+      #
+      # It reads gecko.id out of the BUILT manifest and refuses the placeholder
+      # and any id that disagrees with publish/identity.json. pack.mjs already
+      # refuses to WRITE such a package (:478); this refuses to have written one,
+      # which is the half that survives somebody running a different packer —
+      # and publish/package.node.js, the tool-local packer, is exactly that, and
+      # is what produced the six stale zips this guard was written for.
+      #
+      # It runs on BOTH targets on purpose: the chromium leg asserts the package
+      # carries no Firefox-only key, and the same bytes go to Chrome AND Edge.
+      - name: The built package carries the right store identity
+        run: node scripts/check-store-packages.mjs ${{ matrix.tool }} --dir dist
 
       - name: web-ext lint (Firefox only)
         if: matrix.target == 'firefox' && matrix.os == 'ubuntu-latest'
