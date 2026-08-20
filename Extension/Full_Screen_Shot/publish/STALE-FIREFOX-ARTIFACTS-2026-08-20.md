@@ -1,7 +1,17 @@
-# Six Firefox packages that carried a placeholder add-on id — deleted 2026-08-20
+# The twelve packages that were in `publish/` — all deleted 2026-08-20
 
 **This is the record that made deleting them safe. It is deliberately the only thing that survived
 them.** Everything below was measured from the files themselves before they were removed.
+
+> **Why the filename says FIREFOX when this now covers all twelve.** The six Firefox packages were
+> deleted first, for a specific and serious reason (§1); the six Chromium ones followed a few hours
+> later for an ordinary housekeeping reason (§2). The name is kept because two merged commits and the
+> private corpus already cite this path, and a stable reference that under-describes its contents is a
+> far smaller problem than a broken one.
+
+---
+
+# §1 — Six Firefox packages that carried a placeholder add-on id
 
 ## What they were
 
@@ -29,7 +39,8 @@ somebody's Downloads. A file matching any sha256 above is one of these six and *
 to AMO**, whatever its filename.
 
 The six **chromium** zips in `publish/` were never affected: they carry no `browser_specific_settings`
-at all, which is correct for Chrome and Edge. They were not touched.
+at all, which is correct for Chrome and Edge. They were not touched at the time — see §2, where they
+were deleted a few hours later for an entirely different and much duller reason.
 
 ## 🔴 Why these six were dangerous and an ordinary stale artifact is not
 
@@ -69,9 +80,70 @@ twice:
 Verified in CI on 2026-08-20: the freshly built `dist/fullshot-firefox.zip` carries
 `fullshot@nikatru.com` and passes. Stale versus fresh is exactly the distinction the gate draws.
 
-## ⚠️ Still open, and not closed by this
+## The `.gitignore` contradiction that hid them — since fixed
 
-`Extension/Full_Screen_Shot/.gitignore` ignores `*.zip` while the **root** `.gitignore` says a
-recursive glob over `publish/` zips is *"deliberately NOT ignored"* because *"each release zip is a
-golden master"*. The nested file wins, which is why these six sat where no gate could see them.
-Tracking megabytes of binaries is a decision rather than a fix, so it is recorded rather than changed.
+*(This section said "still open" when written a few hours earlier. It was closed the same day and is
+corrected here rather than left standing: a stale "still open" is how a fixed thing gets fixed twice,
+or worse, gets un-fixed by someone reading this as current.)*
+
+`Extension/Full_Screen_Shot/.gitignore` ignored `*.zip` while the **root** `.gitignore` said a
+recursive glob over `publish/` zips was *"deliberately NOT ignored"* because *"each release zip is a
+golden master"* — and the nested file wins, which is why these six sat where no gate could see them.
+There was a third file too: `templates/tool/.gitignore`, which agreed with the root and had predicted
+the exact consequence in as many words.
+
+It was not a matter of taste. `scripts/pack.mjs`'s dropped-file floor graded **0 entries on every run
+for the life of the repo** as a result, and said so in its own output. Fixed: `!publish/*.zip` in the
+nested file, and the root's self-contradicting closing sentence removed. All three files now agree.
+
+---
+
+# §2 — Six Chromium packages, deleted a few hours later
+
+**Nothing was wrong with these.** They are recorded and deleted for housekeeping, not safety, and the
+distinction matters: §1's files were dangerous, these were merely stale.
+
+| file | version | bytes | `browser_specific_settings` | sha256 |
+|---|---|---:|---|---|
+| `fullshot-1.9.7.zip`   | 1.9.7  | 105 154 | absent (correct) | `4e26c7c9608550f14c555bad328761a39d5e7958e6de025b087046a5d181ab45` |
+| `fullshot-1.9.11.zip`  | 1.9.11 | 106 320 | absent (correct) | `30b37cf3ccd2b0ec6fd97dd8e1cb947d703a4090c9cd6485fcff7bb260e5cbb7` |
+| `fullshot-1.9.13.zip`  | 1.9.13 | 136 774 | absent (correct) | `10d6ef510067bfbd910ee2da45adbf32967cadeb93c90141e671a14b5622441f` |
+| `fullshot-1.10.0.zip`  | 1.10.0 | 595 425 | absent (correct) | `37e414891796c465b311037f35b8f4c3ef19310638c186de77becc11b82532fb` |
+| `fullshot-1.10.1.zip`  | 1.10.1 | 939 887 | absent (correct) | `652fa19691d9ed61faf22d22c61a6e7b6a394907c206a776ad13efb88815dc30` |
+| `fullshot-1.10.2.zip`  | 1.10.2 | 939 887 | absent (correct) | `448ddbbac073a814a13c581d22a83887d8b54941f2a551f5ce863305364c1cc4` |
+
+2 823 447 bytes in total. Every digest was cross-checked against the inventory taken at 02:00Z, before
+any of this session's changes: **6 of 6 identical, zero discrepancies**, and every one confirmed to
+carry no `browser_specific_settings` — i.e. none of them was ever in §1's dangerous class.
+
+## Why they went
+
+Not because they were unsafe. Because **none of them is a golden master and keeping them invited one
+to be mistaken for one.**
+
+`scripts/pack.mjs`'s third floor compares a new build against *"the last released package"* to catch a
+silently dropped file, and `.gitignore` was corrected earlier the same day so that `publish/*.zip` is
+tracked precisely to give that floor an anchor. But **this repository has zero tags and zero
+releases** — no store has ever received any of these files. They are local build leftovers of versions
+that were never shipped.
+
+So after the `.gitignore` fix they were in an actively bad position: sitting in the directory the
+packer looks in, newly un-ignored, and one `git add -A` away from being committed as a "golden
+master" they are not. That very mistake was made and caught in this session — a commit swept all six
+in and had to be undone before pushing. Deleting them removes the trap; the first real release
+supplies a real anchor, and until then `pack.mjs` correctly prints *"graded 0 entries … NOT a clean
+diff"*.
+
+## What deleting them does NOT cost
+
+- **Not the dropped-file floor.** It was already grading zero entries — these were never released, so
+  they were never a valid anchor for it.
+- **Not reproducibility.** `node scripts/pack.mjs fullshot --target chromium --out dist` rebuilds a
+  package from any given commit, byte-reproducibly (CI checks that on every run). What cannot be
+  reconstructed is *which* commit produced these particular bytes — which is exactly what the sha256
+  column above preserves.
+- **Not identification.** A copy of any of these that turns up on a backup drive or a cloud sync can
+  be matched against the table above.
+
+Unlike §1, **there is no danger in a copy of one of these existing.** They are ordinary, correct
+Chromium packages of old versions. The only reason not to upload one is that it is stale.
