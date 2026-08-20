@@ -274,9 +274,20 @@ r.blank();
 r.note(packagesGraded + ' store package(s) opened and graded, ' + packagesUnreadable + ' unreadable, across ' +
   targetsGraded + ' declared target(s).');
 if (packagesGraded === 0) {
-  r.note('⚠️ ZERO PACKAGES WERE PRESENT. Store packages are gitignored (`*.zip`), so a CI checkout has none and');
-  r.note('   this run proved nothing about any artifact. The package limb bites only where the artifacts are:');
-  r.note('   a developer machine, after a build, run by hand. Read this line rather than the exit code.');
+  /* ⚠️ THIS WORDING WAS CORRECTED 2026-08-20, LATER THE SAME DAY IT WAS WRITTEN.
+     It used to say "store packages are gitignored (*.zip), so a CI checkout has
+     none" — true when written and false a few hours later, because the
+     .gitignore contradiction was fixed and `publish/*.zip` is now deliberately
+     tracked. The reason a checkout has none is no longer the ignore rule; it is
+     that there are ZERO RELEASES, so no golden master exists to commit yet. A
+     message that explains an absence with a reason that has stopped being the
+     reason is worse than one that just states the absence. */
+  r.note('⚠️ ZERO PACKAGES WERE PRESENT, so this run proved nothing about any artifact.');
+  r.note('   `publish/*.zip` IS tracked (deliberately — scripts/pack.mjs diffs the next build against the last');
+  r.note('   released package to catch a dropped file). There are simply no releases yet, so there is nothing');
+  r.note('   committed to grade. Until the first one, this limb bites only where the artifacts are: a developer');
+  r.note('   machine after a build, or the `package` job, which grades the zip it just built. Read this line');
+  r.note('   rather than the exit code.');
 }
 
 process.exit(r.finish());
