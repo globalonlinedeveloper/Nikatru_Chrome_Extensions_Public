@@ -308,8 +308,15 @@ const SURFACES = ['extension', 'web', 'cli', 'desktop'];
    from an oversight. Warning about them would have trained people to delete the
    only place the reasoning lives. */
 const DOC_KEYS = ['README', 'NOTES', 'absent'];
+/* 🔴 `storeMetadata` WAS MISSING HERE FROM 2026-08-20 UNTIL LATER THE SAME DAY, AND THE WARNING IT
+   PRODUCED WAS FALSE. The key was added to tool.json with the store layer and IS read —
+   scripts/check-store-metadata.mjs reads nothing else — but this list did not know about it, so every
+   `discover.mjs` run printed `unknown key "storeMetadata" — nothing reads it`.
+   That is worse than a missing warning: a reader who believed it would have deleted a key three store
+   listings and a wired CI gate depend on. A vocabulary list is a second declaration of what exists,
+   and the second declaration is the one that goes stale. */
 const KNOWN_KEYS = ['$schema', 'id', 'name', 'surface', 'status', 'summary', 'aiHandoff',
-  'manifest', 'core', 'package', 'targets', 'tests', 'policy', 'listings', 'build', ...DOC_KEYS];
+  'manifest', 'core', 'package', 'targets', 'tests', 'policy', 'listings', 'storeMetadata', 'build', ...DOC_KEYS];
 
 export function loadTool(root, entry) {
   const rel = typeof entry === 'string' ? entry : entry.rel;

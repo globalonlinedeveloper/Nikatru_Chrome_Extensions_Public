@@ -286,6 +286,42 @@ for (const tool of tools) {
     }
   }
 
+  /* ── 5b. a listing must not send users to ANOTHER store's browser ───────
+     🔴 FOUND BY AUDIT ON THE DAY THE STORE LAYER LANDED, WHICH IS THE WHOLE
+     REASON THIS LIMB EXISTS. The Edge listing was extracted from the Chrome
+     copy — correct for every word except one: it told Edge users to open
+     `chrome://extensions/shortcuts`, a URL Edge does not have. The instruction
+     was accurate, well-formed, and pointed at a browser the reader is not
+     using.
+     Nothing caught it. The character-limit checks passed, the drift check
+     compares the Chrome tree against the Chrome document, and no limb looked
+     at the copy as COPY. A per-store directory whose contents came from
+     another store is the defect this whole layer was built to make visible,
+     so it gets a check rather than a note. */
+  const SCHEME = { chrome: 'chrome://', edge: 'edge://', firefox: 'about:' };
+  for (const [id, row] of Object.entries(rows)) {
+    if (!row || typeof row.dir !== 'string') continue;
+    const abs = path.join(tool.dirAbs, row.dir);
+    if (!fs.existsSync(abs)) continue;
+    const mine = SCHEME[id];
+    const foreign = Object.entries(SCHEME).filter(([k]) => k !== id);
+    for (const f of REQUIRED_PER_STORE) {
+      const fAbs = path.join(abs, f);
+      if (!fs.existsSync(fAbs)) continue;
+      const text = readText(fAbs);
+      for (const [otherId, scheme] of foreign) {
+        if (!text.includes(scheme)) continue;
+        /* `about:` is a legitimate prefix in ordinary prose ("about the app"),
+           so firefox's scheme only counts with a page after it. */
+        if (scheme === 'about:' && !/about:[a-z]/.test(text)) continue;
+        r.fail(tool.rel + '/' + row.dir + '/' + f + ' sends users to the ' + otherId + ' browser',
+          'it contains "' + scheme + '", which is ' + otherId + "'s URL scheme, in the " + id + ' listing.\n' +
+          (mine ? 'Use "' + mine + '" here.' : 'Remove it.') + ' A listing that names another browser\'s URL is an\n' +
+          'instruction the reader cannot follow — and it is exactly what copying a sibling store\'s copy produces.');
+      }
+    }
+  }
+
   /* ── 6. the copy has ONE home, and this is what keeps it that way ───────
      `publish/STORE-LISTING.md` holds the REASONING behind the listing — why the
      redaction bullet is worded as it is, which policy each claim answers to —

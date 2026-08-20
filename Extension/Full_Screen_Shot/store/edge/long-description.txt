@@ -34,6 +34,6 @@ Capture the FULL page (not just the visible screen), the VISIBLE area, a REGION 
 ── KEYBOARD SHORTCUTS ──
 • Alt+Shift+P — capture full page
 • Alt+Shift+V — capture visible area
-(Region and element capture shortcuts can be assigned at chrome://extensions/shortcuts.)
+(Region and element capture shortcuts can be assigned at edge://extensions/shortcuts.)
 
 Everything the other tools charge for — free, private, and pixel-perfect.
