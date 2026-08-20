@@ -102,6 +102,10 @@ const ALLOWED_DELTA = ['background', 'browser_specific_settings',
   'minimum_chrome_version', 'options_page', 'options_ui'];
 
 let FAILS = 0;
+/* Whether the PACKAGE limb actually opened a zip. A run that graded no package
+   has not verified a package, and must not print the same summary as one that
+   did — see the summary block at the bottom. */
+let PACKAGE_GRADED = true;
 const ACTIONS = [];
 function check(label, ok, extra) {
   console.log((ok ? 'PASS  ' : 'FAIL  ') + label + (extra != null ? '  — ' + extra : ''));
@@ -418,6 +422,7 @@ const argZip = (() => { const i = process.argv.indexOf('--zip'); return i !== -1
 const zipPath = argZip ? path.resolve(argZip)
   : path.join(__dirname, 'fullshot-' + ff.version + '-firefox.zip');
 if (!fs.existsSync(zipPath)) {
+  PACKAGE_GRADED = false;
   console.log('NOTE  no Firefox package at ' + path.basename(zipPath) + ' — nothing to grade yet.');
   /* Phrased as the property, not as the disaster: this line used to read
      "a Firefox package built from unguarded source would be dead on load",
@@ -463,7 +468,30 @@ if (!fs.existsSync(zipPath)) {
   }
 }
 
-console.log('\n' + (FAILS ? 'FAILURES: ' + FAILS : 'ALL PASS'));
+/* 🔴 "ALL PASS" OVER A SET THAT EXCLUDED THE PACKAGE IS THE VACUOUS GREEN, and
+   this file printed it until 2026-08-20. With no zip on disk the summary of a
+   run that inspected NO PACKAGE was byte-identical to one that inspected a good
+   package — the `NOTE  no Firefox package … nothing to grade yet` above said so,
+   and a NOTE above a green summary is precisely the line nobody reads.
+
+   It became reachable, not merely theoretical, the same day: the six built
+   Firefox zips were deleted, so the default `--zip` path stopped resolving and
+   every bare run took this branch. A packaging gate that reports ALL PASS with
+   no package to inspect will greenlight an unbuilt release.
+
+   Same rule the rest of this family already follows — an empty subject and a
+   verified subject must never print the same words. */
+if (FAILS) {
+  console.log('\nFAILURES: ' + FAILS);
+} else if (PACKAGE_GRADED) {
+  console.log('\nALL PASS');
+} else {
+  console.log('\nSOURCE PASSES — NO PACKAGE WAS GRADED.');
+  console.log('Every check above ran against the source tree. The package limb opened nothing, so this run');
+  console.log('says nothing about any zip. Build one and point this at it:');
+  console.log('  node scripts/pack.mjs fullshot --target firefox --out dist');
+  console.log('  node Extension/Full_Screen_Shot/publish/verify-firefox-package.node.js --zip dist/fullshot-firefox.zip');
+}
 if (ACTIONS.length) {
   console.log('\n!!! THE FIREFOX PACKAGE IS NOT SUBMITTABLE — ' + ACTIONS.length + ' blocker(s):');
   ACTIONS.forEach((a, i) => console.log('  ' + (i + 1) + '. ' + a));
