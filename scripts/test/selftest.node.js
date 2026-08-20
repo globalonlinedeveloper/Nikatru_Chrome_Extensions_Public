@@ -651,6 +651,177 @@ expect('and --template can then point at the complete one', {
 });
 
 /* =====================================================================
+   check-store-packages.mjs
+
+   The gate whose subject is the BUILT ARTIFACT rather than the source. Every
+   mutation below is a real zip written byte by byte, because the defect it was
+   written for is exactly a case where the source was right and the zip was not:
+   on 2026-08-20 six -firefox.zip in Extension/Full_Screen_Shot/publish/ carried
+   `fullshot@REPLACE-WITH-YOUR-DOMAIN.example` while the overlay beside them
+   carried `fullshot@nikatru.com`. A fixture that mocked the reader would have
+   proved nothing about that.
+   ===================================================================== */
+console.log('\ncheck-store-packages.mjs');
+
+/* A minimal STORED (method 0) zip. No compression, so the test depends on no
+   codec and the reader's deflate path is exercised by the real packages the
+   `package` job builds rather than by a synthetic one here. */
+function zipOf(files) {
+  const locals = [], centrals = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const nb = Buffer.from(name, 'utf8'), body = Buffer.from(text, 'utf8');
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4);
+    lh.writeUInt32LE(body.length, 18); lh.writeUInt32LE(body.length, 22);
+    lh.writeUInt16LE(nb.length, 26);
+    locals.push(lh, nb, body);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6);
+    ch.writeUInt32LE(body.length, 20); ch.writeUInt32LE(body.length, 24);
+    ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(offset, 42);
+    centrals.push(ch, nb);
+    offset += 30 + nb.length + body.length;
+  }
+  const lp = Buffer.concat(locals), cp = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(Object.keys(files).length, 8);
+  eocd.writeUInt16LE(Object.keys(files).length, 10);
+  eocd.writeUInt32LE(cp.length, 12); eocd.writeUInt32LE(lp.length, 16);
+  return Buffer.concat([lp, cp, eocd]);
+}
+
+/* The fixture tool declares only `chromium`, so a Firefox package needs the
+   target adding too — a package for a target the tool does not declare is a
+   different question, and conflating them would make these cases ambiguous. */
+function withPackage(zipName, manifest, { firefoxTarget = true, identity = true } = {}) {
+  return fixture(root => {
+    if (identity) {
+      writeJson(root, TOOL + '/publish/identity.json', { slug: 'goodtool', ownerDomain: 'example.test' });
+    }
+    if (firefoxTarget) {
+      const t = readJson(root, TOOL + '/tool.json');
+      t.targets.firefox = { overlay: 'publish/manifest.firefox.json' };
+      writeJson(root, TOOL + '/tool.json', t);
+      /* The overlay must EXIST: toolinfo.mjs treats a `targets.firefox.overlay`
+         pointing at a missing file as a tool.json contract error, which makes
+         every gate exit 2 before it reads anything. Writing the declaration
+         without the file is how the first draft of these cases turned nine
+         mutations into nine identical CANNOT RUNs. */
+      writeJson(root, TOOL + '/publish/manifest.firefox.json', {
+        browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+      });
+    }
+    const abs = path.join(root, TOOL, 'publish', zipName);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    /* Three shapes, and the Buffer case is here because leaving it out is a
+       real bug this file caught: `zipOf({...})` returns a Buffer, fell through
+       to the object branch, and was JSON.stringify'd INTO a manifest.json —
+       so the "archive with no manifest" case shipped an archive that had one,
+       and the gate correctly graded it and the assertion failed. A fixture that
+       does not build what its name says builds is a test of nothing.
+         string -> written as-is (a file that is not a zip at all)
+         Buffer -> written as-is (a zip this case assembled itself)
+         object -> wrapped as the archive's manifest.json */
+    const bytes = Buffer.isBuffer(manifest) ? manifest
+      : typeof manifest === 'string' ? Buffer.from(manifest, 'utf8')
+        : zipOf({ 'manifest.json': JSON.stringify(manifest) });
+    fs.writeFileSync(abs, bytes);
+  });
+}
+
+const goodFfManifest = {
+  manifest_version: 3, version: '1.0.0', name: 'x',
+  browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+};
+
+expect('a package whose gecko.id agrees with identity.json passes', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'goodtool@example.test',
+  root: withPackage('goodtool-1.0.0-firefox.zip', goodFfManifest)
+});
+
+/* 🔴 THE RECORDED DEFECT. */
+expect('a BUILT package carrying the placeholder gecko.id is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'MUST NOT BE UPLOADED TO AMO',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@REPLACE-WITH-YOUR-DOMAIN.example' } }
+  })
+});
+
+/* Two real-looking domains. No placeholder test catches this one, and AMO fixes
+   whichever reaches it first — permanently. */
+expect('a package whose gecko.id disagrees with identity.json is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'agrees with publish/identity.json',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@someone-elses-domain.test' } }
+  })
+});
+
+expect('a Firefox package with no gecko.id at all is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'carries a gecko.id',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest, browser_specific_settings: { gecko: { strict_min_version: '128.0' } }
+  })
+});
+
+expect('a listed add-on that self-hosts updates is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'must not self-host updates',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@example.test', update_url: 'https://example.test/u.json' } }
+  })
+});
+
+/* The chromium package goes to Chrome AND Edge unchanged, so a Firefox-only key
+   in it ships twice. The target is decided by CONTENT, so this zip is graded as
+   a Firefox one — which is itself the finding: it is named as a chromium
+   artifact and is not one. */
+expect('a chromium-named package carrying browser_specific_settings is not silently accepted', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'MUST NOT BE UPLOADED TO AMO',
+  root: withPackage('goodtool-1.0.0.zip', {
+    manifest_version: 3, version: '1.0.0', name: 'x',
+    browser_specific_settings: { gecko: { id: 'goodtool@REPLACE-WITH-YOUR-DOMAIN.example' } }
+  })
+});
+
+expect('a stale version beside the current one WARNS rather than passing silently', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'is v0.9.0, the tree is v1.0.0',
+  root: withPackage('goodtool-0.9.0-firefox.zip', { ...goodFfManifest, version: '0.9.0' })
+});
+
+/* An unreadable archive must not read as a clean one. */
+expect('a .zip that is not a zip is a finding, not a skip', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'is a readable zip',
+  root: withPackage('goodtool-1.0.0-firefox.zip', 'this is not a zip at all, it is prose')
+});
+
+expect('an archive with no manifest.json is a finding, not a skip', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'contains a manifest.json',
+  root: withPackage('goodtool-1.0.0-firefox.zip', zipOf({ 'README.md': '# not a store package' }))
+});
+
+/* 🔴 THE ANTI-VACUITY PAIR. Zero packages is the CI state and it is legitimate,
+   so it exits 0 — and the run must SAY so, because "0 packages, clean" and
+   "12 packages, clean" printing the same thing is the failure this whole file
+   exists to prevent. */
+expect('zero packages exits 0 but says out loud that it proved nothing', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'ZERO PACKAGES WERE PRESENT',
+  root: fixture(root => { writeJson(root, TOOL + '/publish/identity.json', { slug: 'goodtool', ownerDomain: 'example.test' }); })
+});
+
+expect('a tool declaring no targets CANNOT RUN rather than passing', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 2, contains: 'declares no `targets`',
+  root: fixture(root => {
+    const t = readJson(root, TOOL + '/tool.json');
+    delete t.targets;
+    writeJson(root, TOOL + '/tool.json', t);
+  })
+});
+
+/* =====================================================================
    argument handling
    ===================================================================== */
 console.log('\nargument handling');
