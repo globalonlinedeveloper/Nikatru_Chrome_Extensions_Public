@@ -50,6 +50,62 @@ export class ZipUnreadable extends Error {
  * @param {string} want  exact entry name, e.g. 'manifest.json'
  * @returns {Buffer|null}
  */
+/**
+ * Every entry NAME in the archive's central directory, in stored order.
+ *
+ * 🔴 ADDED 2026-08-20 SO A CHECK CAN RANGE OVER `_locales/<lang>/messages.json`
+ * WITHOUT KNOWING THE LANGUAGE LIST. The alternative — reading `default_locale`
+ * and checking only that one — grades the locale the developer speaks and ships
+ * the other 54 unread, which is the shape of a scan that reports on a subset and
+ * names the whole.
+ *
+ * It re-walks the same central directory `readZipEntry` does rather than sharing
+ * a cursor: the walk is 12 lines, and a shared mutable position between two
+ * exported readers is a bug that only appears when both are called.
+ *
+ * @param {string} abs   absolute path to the .zip
+ * @returns {string[]}   entry names; directory entries included as stored
+ */
+export function listZipEntries(abs) {
+  let buf;
+  try {
+    buf = fs.readFileSync(abs);
+  } catch (e) {
+    throw new ZipUnreadable('cannot read ' + abs + ': ' + e.code + ' — ' + e.message);
+  }
+  if (buf.length < 22) {
+    throw new ZipUnreadable(abs + ' is ' + buf.length + ' byte(s) long — too short to be a zip at all.');
+  }
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= 0; i--) {
+    if (buf.readUInt32LE(i) === SIG_EOCD) { eocd = i; break; }
+  }
+  if (eocd < 0) {
+    throw new ZipUnreadable(abs + ' has no end-of-central-directory record, so it is not a readable zip.');
+  }
+  const count = buf.readUInt16LE(eocd + 10);
+  const cdOff = buf.readUInt32LE(eocd + 16);
+  const cdSize = buf.readUInt32LE(eocd + 12);
+  if (count === 0xFFFF || cdOff === 0xFFFFFFFF || cdSize === 0xFFFFFFFF) {
+    throw new ZipUnreadable(abs + ' uses zip64 extensions, which this reader does not implement.');
+  }
+  if (cdOff + cdSize > buf.length) {
+    throw new ZipUnreadable(abs + ' declares a central directory past the end of the file. The archive is truncated.');
+  }
+  const names = [];
+  let p = cdOff;
+  for (let n = 0; n < count; n++) {
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== SIG_CEN) {
+      throw new ZipUnreadable(abs + ': central-directory entry ' + n + ' of ' + count +
+        ' does not start with the expected signature at byte ' + p + '. The archive is malformed.');
+    }
+    const nameLen = buf.readUInt16LE(p + 28);
+    names.push(buf.toString('utf8', p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+  }
+  return names;
+}
+
 export function readZipEntry(abs, want) {
   let buf;
   try {
