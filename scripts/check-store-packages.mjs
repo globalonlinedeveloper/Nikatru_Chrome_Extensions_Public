@@ -82,7 +82,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Report, parseArgs, die } from './lib/report.mjs';
 import { repoRoot, resolveTool, loadAllTools, readJson } from './lib/toolinfo.mjs';
-import { readZipEntry, ZipUnreadable } from './lib/zip.mjs';
+import { readZipEntry, listZipEntries, ZipUnreadable } from './lib/zip.mjs';
 
 /* The placeholder the first Firefox manifest shipped with. Same test
    verify-firefox-package.node.js and pack.mjs apply, deliberately: an id this
@@ -235,12 +235,85 @@ for (const tool of tools) {
     } else {
       /* The Chrome/Edge package. The same bytes go to both stores, so a
          Firefox-only key here is shipped twice. */
+
+      /* 🔴 A LISTED EXTENSION MUST NOT SELF-HOST ITS UPDATES, AND ONLY THE
+         FIREFOX HALF SAID SO. The gecko branch above has refused
+         `gecko.update_url` since it was written; the Chromium half had no
+         equivalent, so a top-level `update_url` would ship unremarked to BOTH
+         Chrome and Edge. An upload carrying it is refused at review, which
+         costs a submission slot rather than failing here.
+         developer.chrome.com/docs/extensions/reference/manifest/update-url
+         (fetched 2026-08-20). */
+      if ('update_url' in manifest) {
+        r.fail(pkg.rel + ' has no top-level update_url',
+          'this is the Chromium package — the identical file goes to Chrome Web Store AND Edge\n' +
+          'Add-ons — and it declares update_url, which a store-listed extension must not do.\n' +
+          'developer.chrome.com/docs/extensions/reference/manifest/update-url (fetched 2026-08-20).');
+      }
+
       if ('browser_specific_settings' in manifest) {
         r.fail(pkg.rel + ' carries no browser_specific_settings',
           'this is the Chromium package — the identical file is uploaded to Chrome Web Store AND\n' +
           'Edge Add-ons — and it declares a Firefox-only key.');
       } else {
         r.pass(pkg.rel + ' is a clean Chromium package', 'no Firefox-only keys; v' + (manifest.version || '?'));
+      }
+
+      /* 🔴 THE SHARED PACKAGE MUST NOT NAME ONE OF THE TWO BROWSERS IT SHIPS TO.
+         These identical bytes go to Chrome Web Store AND Edge Add-ons, so a
+         store-listing field reading "... for Chrome" is correct in one listing
+         and wrong in the other, to a user who cannot tell why. It is the same
+         defect as the Edge listing that told users to open `chrome://` — one
+         layer down, in bytes rather than prose.
+
+         ⚠️ RESOLVED THROUGH EVERY PACKAGED LOCALE, NOT `default_locale`.
+         name/short_name/description are `__MSG_*__` placeholders here, and the
+         store resolves them in the READER's language. Grading only `en` would
+         check the language the developer speaks and ship the other 54 unread.
+
+         ⚠️ AND IT READS `message`, NEVER `description`. Measured 2026-08-20:
+         55 of 55 locale files contain the word "chrome" — every one of them in a
+         `description`, which is TRANSLATOR GUIDANCE and is never shown to a
+         user. A grep over these files would fire 55 times and be wrong 55 times.
+         That is this repository's own recorded lesson: assert on parsed
+         structure, never by grepping prose. */
+      const LOCALISED = ['name', 'short_name', 'description'];
+      const placeholders = LOCALISED
+        .map((k) => ({ field: k, key: /^__MSG_(.+)__$/.exec(String(manifest[k] || ''))?.[1] || null }))
+        .filter((x) => x.key !== null);
+      if (placeholders.length > 0) {
+        let localeFiles = [];
+        try {
+          localeFiles = listZipEntries(pkg.abs).filter((n) => /^_locales\/[^/]+\/messages\.json$/.test(n));
+        } catch (e) {
+          localeFiles = [];
+        }
+        if (localeFiles.length === 0) {
+          r.fail(pkg.rel + ' resolves its __MSG_ manifest fields',
+            'the manifest localises ' + placeholders.map((x) => x.field).join(', ') + ' but the package carries NO\n' +
+            '_locales/<lang>/messages.json. Every field below would be graded over an empty set, which reads\n' +
+            'exactly like a clean package.');
+        } else {
+          const offenders = [];
+          for (const rel of localeFiles) {
+            let msgs = null;
+            try { msgs = JSON.parse(readZipEntry(pkg.abs, rel).toString('utf8')); }
+            catch { continue; }
+            const lang = rel.split('/')[1];
+            for (const ph of placeholders) {
+              const val = msgs?.[ph.key]?.message;
+              if (typeof val === 'string' && /chrome/i.test(val)) offenders.push(lang + ' ' + ph.field + ': "' + val.slice(0, 60) + '"');
+            }
+          }
+          if (offenders.length > 0) {
+            r.fail(pkg.rel + ' names no browser in its localised store fields',
+              offenders.length + ' resolved value(s) name Chrome. The SAME bytes are uploaded to Edge\n' +
+              'Add-ons, where that sentence is wrong for the reader:\n  ' + offenders.slice(0, 8).join('\n  '));
+          } else {
+            r.pass(pkg.rel + ' names no browser in its localised store fields',
+              placeholders.length + ' field(s) resolved across ' + localeFiles.length + ' locale(s)');
+          }
+        }
       }
     }
 

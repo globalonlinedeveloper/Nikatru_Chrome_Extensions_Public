@@ -812,6 +812,47 @@ expect('zero packages exits 0 but says out loud that it proved nothing', {
   root: fixture(root => { writeJson(root, TOOL + '/publish/identity.json', { slug: 'goodtool', ownerDomain: 'example.test' }); })
 });
 
+/* 🔴 THE CHROMIUM HALF HAD NO update_url REFUSAL. The gecko branch has refused
+   `gecko.update_url` since it was written; the Chromium branch had no equivalent,
+   so the SAME bytes could carry a top-level `update_url` to Chrome Web Store and
+   Edge Add-ons unremarked. Both stores refuse a listed extension that self-hosts
+   updates, at review — which costs a submission slot instead of a build. */
+expect('a chromium package that self-hosts updates is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'has no top-level update_url',
+  root: withPackage('goodtool-1.0.0-chromium.zip',
+    { manifest_version: 3, version: '1.0.0', name: 'x', update_url: 'https://example.test/updates.xml' },
+    { firefoxTarget: false })
+});
+
+/* 🔴 ONE PACKAGE, TWO STORES. These bytes go to Chrome Web Store AND Edge
+   Add-ons, so a localised store field reading "for Chrome" is right in one
+   listing and wrong in the other — the same defect as the Edge listing that told
+   users to open `chrome://`, one layer down. Resolved through the PACKAGED
+   locales, because the store resolves `__MSG_` in the reader's language. */
+expect('a localised store field naming Chrome is caught in the shared package', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'names no browser in its localised store fields',
+  root: withPackage('goodtool-1.0.0-chromium.zip', zipOf({
+    'manifest.json': JSON.stringify({ manifest_version: 3, version: '1.0.0', default_locale: 'en', name: '__MSG_appName__' }),
+    '_locales/en/messages.json': JSON.stringify({ appName: { message: 'GoodTool for Chrome' } }),
+  }), { firefoxTarget: false })
+});
+
+/* 🔴 AND THE CASE THAT PROVES THE CHECK PARSES INSTEAD OF GREPPING. `description`
+   in a messages.json is TRANSLATOR GUIDANCE and is never shown to a user.
+   MEASURED 2026-08-20 on the real tool: 55 of 55 locale files contain the word
+   "chrome", every one of them in a `description`. A grep would fire 55 times and
+   be wrong 55 times; this must PASS. Without this case the check above could be
+   "fixed" into a grep and no test would notice. */
+expect('the word chrome in a translator DESCRIPTION is not a finding', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'names no browser in its localised store fields',
+  root: withPackage('goodtool-1.0.0-chromium.zip', zipOf({
+    'manifest.json': JSON.stringify({ manifest_version: 3, version: '1.0.0', default_locale: 'en', name: '__MSG_appName__' }),
+    '_locales/en/messages.json': JSON.stringify({
+      appName: { message: 'GoodTool', description: 'Shown in the Chrome Web Store and chrome://extensions.' },
+    }),
+  }), { firefoxTarget: false })
+});
+
 expect('a tool declaring no targets CANNOT RUN rather than passing', {
   script: 'check-store-packages.mjs', argv: ['goodtool'], code: 2, contains: 'declares no `targets`',
   root: fixture(root => {
