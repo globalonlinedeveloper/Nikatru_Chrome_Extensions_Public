@@ -208,7 +208,23 @@ const toolJson = {
     optionalHostPermissions: {},
     networkAllowlist: []
   },
-  listings: { chrome: null, edge: null, firefox: null }
+  listings: { chrome: null, edge: null, firefox: null },
+  /* THE STORE AXIS, stamped for every new tool. `targets` above is the BUILD
+     axis and has two entries; this has three, because the chromium build ships
+     to Chrome and Edge as two separate listings. Stamping it here is what stops
+     tool #2 having its listing hand-typed into a console: check-store-metadata
+     .mjs grades a stamped tool from its first commit, and `served: false` means
+     the missing directories print rather than blocking the build. */
+  storeMetadata: {
+    sharedDir: 'store/_shared',
+    stores: {
+      chrome: { target: 'chromium', dir: 'store/chrome', served: false },
+      edge: { target: 'chromium', dir: 'store/edge', served: false },
+      ...(has('publish/manifest.firefox.json')
+        ? { firefox: { target: 'firefox', dir: 'store/firefox', served: false } }
+        : {})
+    }
+  }
 };
 
 r.note(sourceFiles.length + ' file(s) to copy · package.include: ' + include.join(', '));

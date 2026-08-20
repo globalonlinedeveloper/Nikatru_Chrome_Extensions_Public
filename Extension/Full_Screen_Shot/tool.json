@@ -47,6 +47,43 @@
     "firefox": { "overlay": "publish/manifest.firefox.json" }
   },
 
+  "storeMetadata": {
+    "_why": "TWO BUILDS, THREE STORES. `targets` above is the BUILD axis and it has two entries; this is the STORE axis and it has three. The chromium zip goes to Chrome AND Edge byte-identical, so `target` below is what makes that sharing a DECLARATION rather than an accident — two rows naming one target cannot drift into two builds. Every listing field that differs per store lives under `dir`; everything all three accept lives under `sharedDir`.",
+    "_servedWhy": "`served` is a GATE, not membership. A row exists for a store that is deferred so its facts are recorded once instead of rediscovered at submission. A missing directory PRINTS while unserved and FAILS once served — which is how owner-gated work (accounts, screenshots) avoids turning CI permanently red. Nothing is served today: FullShot has never been submitted anywhere.",
+    "_vocabularyWhy": "The store ids are NOT declared here. They are derived from scripts/schema/tool.schema.json -> properties.listings.properties, which check-catalog.mjs already treats as the store vocabulary. A fourth list of store names would be the second declaration and the first to drift; check-store-metadata.mjs asserts this block, `targets.*.stores` and `listings` all agree.",
+    "sharedDir": "store/_shared",
+    "_limitsWhy": "A LIMIT WITH NO `source` IS REFUSED, NOT ENFORCED. check-store-metadata.mjs fails the build on any `max` that arrives without a URL and a fetch date, because an invented limit fires on CORRECT input — this factory has already rejected its own fixture at 129 characters against a made-up '120 or fewer'. Everything below was read from the store's own documentation on 2026-08-20; everything that could NOT be is in `_unverified` and is deliberately unenforced.",
+    "_unverified": [
+      "EDGE NAME LIMIT (45) and AMO NAME LIMIT (50) — MDN states both, dated 'as of February 2024', but learn.microsoft.com states no name limit anywhere and extensionworkshop states none either. MDN is a secondary source for another vendor's rule. NOT enforced until re-fetched from the store itself.",
+      "CHROME LONG-DESCRIPTION MAXIMUM — the widely-repeated 16,000 appears NOWHERE on developer.chrome.com. cws-dashboard-listing, best-listing, prepare and program-policies all describe the field with no number. NOT enforced.",
+      "PERMANENCE OF THE CHROME ITEM ID AND EDGE PRODUCT ID — neither store states in writing that its assigned id is immutable. Assume it is; do not write it down as sourced fact.",
+      "AMO SCREENSHOT COUNT AND DIMENSION LIMITS — the docs say 'no practical limit' and give recommendations, not requirements."
+    ],
+    "stores": {
+      "chrome": {
+        "target": "chromium", "dir": "store/chrome", "served": false,
+        "limits": {
+          "title.txt": { "max": 75, "source": "https://developer.chrome.com/docs/extensions/reference/manifest/name (fetched 2026-08-20) — verbatim: \"short, plain text string (maximum of 75 characters)\"" },
+          "short-description.txt": { "max": 132, "source": "https://developer.chrome.com/docs/webstore/best-listing (fetched 2026-08-20) — verbatim: \"132 characters or less\"" }
+        }
+      },
+      "edge": {
+        "target": "chromium", "dir": "store/edge", "served": false,
+        "manifestPatch": null,
+        "_patchWhy": "Microsoft documents exactly two required edits to a Chrome package: remove `update_url`, and rebrand if the name or description says 'Chrome'. FullShot's manifest carries no update_url and its name is __MSG_appName__ — measured 2026-08-20 — so no patch is needed TODAY. The key is present and null so that the day one is needed it is a value, not a new mechanism.",
+        "limits": {
+          "long-description.txt": { "min": 250, "max": 10000, "source": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension (fetched 2026-08-20) — verbatim: \"Length: Minimum 250 characters, maximum 10,000 characters.\"" }
+        }
+      },
+      "firefox": {
+        "target": "firefox", "dir": "store/firefox", "served": false,
+        "limits": {
+          "short-description.txt": { "max": 250, "source": "https://extensionworkshop.com/documentation/develop/create-an-appealing-listing/ (fetched 2026-08-20) — verbatim: \"The summary description for your add-on is limited to 250 characters\"" }
+        }
+      }
+    }
+  },
+
   "tests": [
     "test/sim-torture.node.js",
     "test/pixel-sim/run.js",

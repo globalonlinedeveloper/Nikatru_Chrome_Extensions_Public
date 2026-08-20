@@ -822,6 +822,135 @@ expect('a tool declaring no targets CANNOT RUN rather than passing', {
 });
 
 /* =====================================================================
+   check-store-metadata.mjs
+
+   The STORE axis. Two builds, three stores — so the mutations that matter are
+   the ones where those two axes are allowed to drift apart, and the one where a
+   store limit arrives without anybody having read it from the store.
+   ===================================================================== */
+console.log('\ncheck-store-metadata.mjs');
+
+const STORE_FILES = {
+  'title.txt': 'Good Tool',
+  'short-description.txt': 'A fixture extension used by the scripts self-test.',
+  'long-description.txt': 'x'.repeat(400),
+  'category.txt': 'Productivity',
+};
+const SHARED_FILES = {
+  'privacy-policy-url.txt': 'https://example.test/privacy',
+  'support-url.txt': 'https://example.test/support',
+  'screenshots/README.md': '# 1280x800, the one size all three stores take\n',
+};
+
+/* A complete, correct store layer on the fixture tool: three rows, two targets,
+   every directory populated. Mutations below start from this and break one
+   thing, so a failure can only be the thing that was broken. */
+function withStores(mutate = () => {}) {
+  return fixture(root => {
+    const t = readJson(root, TOOL + '/tool.json');
+    t.targets = { chromium: { stores: ['chrome', 'edge'] }, firefox: { overlay: 'publish/manifest.firefox.json' } };
+    writeJson(root, TOOL + '/publish/manifest.firefox.json', {
+      browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+    });
+    t.storeMetadata = {
+      sharedDir: 'store/_shared',
+      stores: {
+        chrome: { target: 'chromium', dir: 'store/chrome', served: false },
+        edge: { target: 'chromium', dir: 'store/edge', served: false },
+        firefox: { target: 'firefox', dir: 'store/firefox', served: false },
+      },
+    };
+    const dirs = { chrome: 'store/chrome', edge: 'store/edge', firefox: 'store/firefox' };
+    for (const d of Object.values(dirs)) {
+      for (const [f, body] of Object.entries(STORE_FILES)) w(root, TOOL + '/' + d + '/' + f, body + '\n');
+    }
+    for (const [f, body] of Object.entries(SHARED_FILES)) w(root, TOOL + '/store/_shared/' + f, body + '\n');
+    mutate(t, root);
+    writeJson(root, TOOL + '/tool.json', t);
+  });
+}
+
+expect('a complete three-store layer passes', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: '3 store row(s) graded',
+  root: withStores()
+});
+
+/* 🔴 THE AXIS MUTATIONS — the two that let builds and stores drift apart. */
+expect('a store naming a target that does not exist is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'which is not in targets',
+  root: withStores(t => { t.storeMetadata.stores.edge.target = 'webkit'; })
+});
+expect('a target no store claims is caught — an artifact going nowhere', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'is claimed by at least one store',
+  root: withStores(t => { t.targets.safari = { overlay: null }; })
+});
+
+/* The three declarations of the store set must agree. */
+expect('a store set that disagrees with the schema vocabulary is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'two declarations of one fact',
+  root: withStores(t => { delete t.storeMetadata.stores.firefox; })
+});
+
+/* served is a GATE — the same absence, two verdicts. */
+expect('a MISSING directory on an unserved store PRINTS and exits 0', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'NO TREE (not served)',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', 'chrome'), { recursive: true, force: true }); })
+});
+expect('the SAME missing directory on a SERVED store FAILS', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the listing is live',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    fs.rmSync(path.join(root, TOOL, 'store', 'chrome'), { recursive: true, force: true });
+  })
+});
+
+/* What is owner-gated is CREATING a listing, not KEEPING one. */
+expect('an EMPTIED listing field fails even on an unserved store', {
+  /* A single-line fragment on purpose: Report.fail() re-indents every wrapped
+     line by eight spaces, so a `contains` that spans the wrap never matches
+     even when the gate is behaving perfectly. */
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'An empty listing field is worse than a missing one',
+  root: withStores((t, root) => { w(root, TOOL + '/store/chrome/title.txt', '   \n'); })
+});
+expect('a missing required listing field is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'category.txt exists',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', 'edge', 'category.txt')); })
+});
+
+expect('an orphan directory under store/ is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'orphaned, unreachable',
+  root: withStores((t, root) => { w(root, TOOL + '/store/opera/title.txt', 'left behind\n'); })
+});
+
+/* 🔴 THE LIMIT MUTATIONS. An invented limit fires on correct input. */
+expect('a limit with no source is REFUSED rather than enforced', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'An invented limit fires on CORRECT input',
+  root: withStores(t => { t.storeMetadata.stores.chrome.limits = { 'title.txt': { max: 75 } }; })
+});
+expect('a value over a SOURCED limit is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'against a maximum of 5',
+  root: withStores(t => {
+    t.storeMetadata.stores.chrome.limits = { 'title.txt': { max: 5, source: 'https://developer.chrome.com/x (fetched 2026-08-20)' } };
+  })
+});
+expect('a value under a SOURCED minimum is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'against a minimum of 250',
+  root: withStores(t => {
+    t.storeMetadata.stores.edge.limits = { 'title.txt': { min: 250, source: 'https://learn.microsoft.com/x (fetched 2026-08-20)' } };
+  })
+});
+
+/* Anti-vacuity. */
+expect('an emptied store set CANNOT RUN rather than passing', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'row set IS the subject',
+  root: withStores(t => { t.storeMetadata.stores = {}; })
+});
+expect('a tool with targets but NO storeMetadata is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'checked by nothing',
+  root: withStores(t => { delete t.storeMetadata; })
+});
+
+/* =====================================================================
    argument handling
    ===================================================================== */
 console.log('\nargument handling');
