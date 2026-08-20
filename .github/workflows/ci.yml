@@ -69,7 +69,22 @@ jobs:
           # is exactly what will be invoked — .mjs gates and the .node.js self-test
           # alike. A hand-written list would be a second copy of the same fact, and
           # the copy is the one that rots, toward looking healthier than the repo is.
-          called=$(grep -rhoE '(scripts)/[a-z0-9][a-z0-9./-]*\.(mjs|node\.js)' .github/workflows | sort -u)
+          # 🔴 THE SECOND ALTERNATIVE WAS ADDED 2026-08-20 AND IT CLOSED A REAL
+          # BLIND SPOT. The pattern was anchored on `scripts/` alone, so a gate
+          # living in a TOOL's publish/ directory could never appear in this
+          # inventory — which is how publish/verify-firefox-package.node.js sat
+          # in no workflow at all, unnoticed, while being the repo's most
+          # detailed AMO gate.
+          #
+          # ⚠️ IT IS DELIBERATELY NARROW RATHER THAN A GENERAL PATH MATCH.
+          # Measured that day: loosening it to any `<something>/publish/*.node.js`
+          # also matches PROSE — a comment three jobs below mentions
+          # `publish/package.node.js`, a tool-relative path that does not resolve
+          # from the repo root, so the inventory would have reported ABSENT and
+          # failed the build over a sentence. Requiring the full
+          # `Extension/<Tool>/publish/` prefix cannot match that, and was
+          # verified to produce a byte-identical list on the current workflows.
+          called=$(grep -rhoE '(scripts|Extension/[A-Za-z0-9_]+/publish)/[A-Za-z0-9][A-Za-z0-9._/-]*\.(mjs|node\.js)' .github/workflows | sort -u)
           if [ -z "$called" ]; then
             echo "::error::this check found no gate-script call in .github/workflows at all — its own pattern is broken, and it was about to report a clean inventory over an empty set."
             exit 1
@@ -326,6 +341,27 @@ jobs:
       # the script's header rather than left to be discovered.
       - name: The BUILT store packages carry the right add-on identity
         run: node scripts/check-store-packages.mjs ${{ matrix.tool }}
+      # ── THE TOOL'S OWN AMO SUBMISSION GATE ─────────────────────────────────
+      # 🔴 UNTIL 2026-08-20 THIS RAN IN NO WORKFLOW AT ALL. It is the most
+      # detailed AMO gate in the repository — gecko id, the data-collection
+      # declaration, the Firefox background fallback, Chrome-only keys, manifest
+      # drift, and the packaged zip — and it was reachable only by a human who
+      # remembered to type it. It was also, by then, grading the WRONG DOCUMENT:
+      # publish/manifest.firefox.json became an RFC 7386 merge patch on
+      # 2026-08-18 and the script still read it as a whole manifest, producing
+      # 22 failures of which 19 were the misreading. Both are fixed; this is the
+      # wiring half.
+      #
+      # ⚠️ NAMED EXPLICITLY, NOT DISCOVERED. The path is a literal so the
+      # `gate-inventory` job above can see it — that job derives its set from
+      # the workflow text, and a gate it cannot see is a gate that can vanish
+      # without anything failing. The `if:` is per-tool because this gate is
+      # tool-local by design: templates/tool ships a copy to every new tool, so
+      # a second tool adds a second line here rather than inheriting this one.
+      # Only tools with a `targets.firefox` need it at all.
+      - name: The tool's own AMO submission gate (FullShot)
+        if: matrix.tool == 'fullshot'
+        run: node Extension/Full_Screen_Shot/publish/verify-firefox-package.node.js
 
   sims:
     name: sims · ${{ matrix.tool }} · node ${{ matrix.node }}
