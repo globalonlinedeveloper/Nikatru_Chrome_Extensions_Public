@@ -109,13 +109,25 @@ package-lock.json.bak
 coverage/
 
 # ── owner-private material kept OUT of a public repo ────────────────────
-# These live in Nikatru_Chrome_Extensions_Private (repointed 2026-08-19; it was Project_Cross_browser_Extensions_Private until the owner renamed all five repos).
+# These live in Nikatru_Extensions_Private — a SIBLING directory under Projects/,
+# not a child of this one. 📖 The rule for what goes where is now written down at
+# docs/PUBLIC-PRIVATE.md; this file only enforces it.
 #
-# 🔴 `private/` IS THAT REPOSITORY, CLONED IN PLACE — a separate git repo nested
-# inside this one, the same arrangement the Flutter product uses for company/ and
-# knowledge/. Nesting is what makes the split usable day to day: the spec sits
-# beside the code it specifies, so a session can read both without leaving the
-# folder.
+# 🔴 THE REPO NAME ABOVE WAS WRONG UNTIL 2026-08-20, AND IT IS THE THIRD DEAD NAME
+# IN THE STACK. This line read `Nikatru_Chrome_Extensions_Private`, itself a
+# correction of `Project_Cross_browser_Extensions_Private`. Both are dead: the
+# owner dropped `Chrome` from all four repo names on 2026-08-19, and nothing in
+# either tree recorded it. ⚠️ A rename FREES the old name and GitHub keeps
+# answering 200 through a redirect until something re-claims it — so a dead name
+# in a comment reads as correct right up until the day it silently is not.
+# Confirm a repo name with `gh repo list`, NEVER `gh api repos/<owner>/<name>`.
+#
+# 🔴 `private/` AS A NESTED CLONE IS NOT THE ARRANGEMENT IN EFFECT, and the
+# paragraph that used to stand here described one as though it were. There is no
+# `private/` directory on disk; the two repositories are siblings. The rule is
+# kept — a future clone-in-place must not become committable by accident — but do
+# not read it as a description of the layout. `ci.yml` and `scripts/secret-scan.mjs`
+# also name `private/`, and are correct for the same defensive reason.
 # It MUST stay ignored. Git does not descend into a nested repo, but without this
 # line `git add -A` stages the DIRECTORY as a gitlink — and a reader of the public
 # repo then sees a commit hash pointing at a repository they cannot fetch, which
@@ -136,9 +148,14 @@ private/
 #
 # What happened to the exposure, stated as it now stands rather than as it stood
 # when this block was written: the remote was DELETED AND RECREATED EMPTY, so the
-# history that carried them is gone rather than merely superseded — measured,
-# `git ls-remote --heads origin` returns nothing at all, and the local
-# `origin/main` is a stale cache of a branch that no longer exists anywhere. The
+# history that carried them is gone rather than merely superseded — measured ON
+# THE DAY, `git ls-remote --heads origin` returned nothing at all, and the local
+# `origin/main` was a stale cache of a branch that no longer existed anywhere.
+# ⚠️ THAT MEASUREMENT IS A DATED RECORD AND IS NO LONGER TRUE OF TODAY: the
+# remote was repopulated and now carries branches and history again. The claim is
+# kept in the past tense rather than deleted, because it is the evidence that the
+# leaked history is gone; it is corrected here because a present-tense "returns
+# nothing at all" would be read as a live fact and re-measured to the opposite. The
 # earlier wording here said they "reached the public repo … before being removed",
 # which described a cleanup commit on top of a live history and is no longer what
 # is true. Nothing about the rules below changes: the history was destroyed by an
