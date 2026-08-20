@@ -1,0 +1,7 @@
+NOT-YET-HOSTED
+
+# publish/PRIVACY-POLICY.html is written and is NOT hosted anywhere.
+# No store submission can proceed until it is reachable over https with no login.
+# publish/identity.json privacyPolicyUrl is deliberately empty for the same reason:
+# a plausible-looking URL that 404s is worse than a blank, because it reads as done.
+# Replace this whole file with the URL when it is live. See PRIVACY-POLICY-HOSTING.md.
