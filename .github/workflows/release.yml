@@ -74,11 +74,50 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
-      - name: Gates (manifest == CHANGELOG == tag, policy, core sync)
+      # 🔴 A RELEASE USED TO RUN FEWER GATES THAN A PULL REQUEST. Measured
+      # 2026-08-20 by diffing the `node scripts/*.mjs` calls in the two files:
+      # NINE things ci.yml runs did not run here, on the one path that actually
+      # ships bytes to users. A gate that grades every PR and not the release is
+      # a gate the release does not have.
+      #
+      # ⚠️ FIVE OF THE NINE ARE ADDED. The other four are named below rather
+      # than quietly omitted, because "not run here" and "forgotten" look
+      # identical six months on:
+      #   · discover.mjs        computes WHICH tools a push changed, to build
+      #                        ci's matrix. A tag names exactly one tool and this
+      #                        job already parsed it. Nothing to discover.
+      #   · publish-catalog.mjs writes the catalogue for the site. It is a
+      #                        publishing act of its own, on its own trigger; a
+      #                        release must not silently republish it.
+      #   · selftest.node.js   grades THE GATES, not the artifact. It answers
+      #                        "do these checks still bite", which is a question
+      #                        about the repository and is ci's to ask on every
+      #                        push — including this one.
+      #   · sha256.mjs         NOT missing. Its own header says so: "release.yml
+      #                        publishes the digests with coreutils `sha256sum`",
+      #                        which the Checksums step below does. sha256.mjs is
+      #                        ci's DETERMINISM helper — it hashes two independent
+      #                        builds and compares them. Adding the binary here
+      #                        without that second build would publish a digest
+      #                        twice and prove nothing new.
+      #     ⬜ The determinism CHECK itself is still ci-only. Re-running it here
+      #        would re-prove reproducibility on the exact bytes being shipped,
+      #        which is the strongest form of that claim. It is not added in this
+      #        change because it doubles the pack step, and that is a decision
+      #        with a cost rather than an oversight.
+      - name: Gates (manifest == CHANGELOG == tag, policy, core sync, lint, store metadata, catalogue)
         run: |
           node scripts/check-version.mjs ${{ steps.tag.outputs.id }} --expect ${{ steps.tag.outputs.version }}
           node scripts/policy-check.mjs   ${{ steps.tag.outputs.id }}
           node scripts/check-core-sync.mjs ${{ steps.tag.outputs.id }}
+          node scripts/lint.mjs ${{ steps.tag.outputs.id }}
+          node scripts/check-store-metadata.mjs ${{ steps.tag.outputs.id }}
+          node scripts/check-catalog.mjs
+
+      # Full tree, no tool argument — the same invocation ci.yml makes. A
+      # credential committed since the last PR reaches users through THIS path.
+      - name: Secret scan (full tree)
+        run: node scripts/secret-scan.mjs .
 
       - name: Sims
         run: node scripts/run-tests.mjs ${{ steps.tag.outputs.id }}
@@ -87,6 +126,15 @@ jobs:
         run: |
           node scripts/pack.mjs ${{ steps.tag.outputs.id }} --target chromium --out dist --release
           node scripts/pack.mjs ${{ steps.tag.outputs.id }} --target firefox  --out dist --release
+
+      # ⚠️ AFTER THE PACK, AND POINTED AT `dist` ON PURPOSE. This gate reads
+      # the BUILT archives — gecko.id, update_url, the localised store fields —
+      # and its DEFAULT_DIRS are ['publish', 'dist'], so run before the pack it
+      # would grade whatever stale zips happened to sit in publish/ and report on
+      # a release it never opened. These are the exact bytes the next step
+      # uploads.
+      - name: The built packages are uploadable
+        run: node scripts/check-store-packages.mjs ${{ steps.tag.outputs.id }} --dir dist
 
       - name: Reference integrity + leak check on every artifact
         run: |
