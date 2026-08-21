@@ -1,7 +1,7 @@
 {
   "appName": "FullShot — снимок всей страницы",
   "appShortName": "FullShot",
-  "appDescription": "Снимайте всю страницу, видимую область, выделенный участок или любой элемент. Редактируйте, добавляйте пометки и экспортируйте в PNG, JPEG, WebP или PDF с умным разбиением на страницы.",
+  "appDescription": "Снимайте всю страницу, видимую область, участок или элемент. Редактируйте, помечайте и экспортируйте в PNG, JPEG, WebP или PDF.",
   "actionDefaultTitle": "FullShot — снять страницу (Alt+Shift+P)",
   "commandCaptureFullPage": "Снять всю страницу",
   "commandCaptureVisible": "Снять видимую область",

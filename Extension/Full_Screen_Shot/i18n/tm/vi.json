@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Chụp ảnh màn hình toàn trang",
   "appShortName": "FullShot",
-  "appDescription": "Chụp toàn trang, vùng hiển thị, vùng chọn hoặc bất kỳ phần tử nào. Chỉnh sửa, chú thích và xuất ra PNG, JPEG, WebP hoặc PDF với khả năng ngắt trang thông minh.",
+  "appDescription": "Chụp toàn trang, vùng hiển thị, vùng chọn hoặc bất kỳ phần tử nào. Chỉnh sửa, chú thích và xuất ra PNG, JPEG, WebP hoặc PDF.",
   "actionDefaultTitle": "FullShot - Chụp trang (Alt+Shift+P)",
   "commandCaptureFullPage": "Chụp toàn trang",
   "commandCaptureVisible": "Chụp vùng hiển thị",

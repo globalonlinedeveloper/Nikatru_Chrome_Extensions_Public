@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Tangkapan Layar Seluruh Halaman",
   "appShortName": "FullShot",
-  "appDescription": "Tangkap seluruh halaman, area yang terlihat, area pilihan, atau elemen apa pun. Edit, beri anotasi, lalu ekspor ke PNG, JPEG, WebP, atau PDF dengan pemisahan halaman cerdas.",
+  "appDescription": "Tangkap seluruh halaman, area terlihat, area pilihan, atau elemen. Edit, beri anotasi, lalu ekspor ke PNG, JPEG, WebP, atau PDF.",
   "actionDefaultTitle": "FullShot - Tangkap halaman (Alt+Shift+P)",
   "commandCaptureFullPage": "Tangkap seluruh halaman",
   "commandCaptureVisible": "Tangkap area yang terlihat",

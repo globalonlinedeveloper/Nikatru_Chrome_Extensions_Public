@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - പൂർണ്ണ പേജ് സ്ക്രീൻ ക്യാപ്ചർ",
   "appShortName": "FullShot",
-  "appDescription": "പൂർണ്ണ പേജ്, കാണുന്ന ഭാഗം, തിരഞ്ഞെടുത്ത പ്രദേശം അല്ലെങ്കിൽ ഏതു ഘടകവും ക്യാപ്ചർ ചെയ്യുക. എഡിറ്റ് ചെയ്ത് PNG, JPEG, WebP അല്ലെങ്കിൽ PDF ആയി എക്സ്പോർട്ട് ചെയ്യുക.",
+  "appDescription": "പൂർണ്ണ പേജ്, കാണുന്ന ഭാഗം, തിരഞ്ഞെടുത്ത പ്രദേശം, ഏതു ഘടകവും പകർത്തുക. എഡിറ്റ് ചെയ്ത് PNG, JPEG, WebP, PDF ആയി എക്സ്പോർട്ട് ചെയ്യുക.",
   "actionDefaultTitle": "FullShot - പേജ് ക്യാപ്ചർ ചെയ്യുക (Alt+Shift+P)",
   "commandCaptureFullPage": "പൂർണ്ണ പേജ് ക്യാപ്ചർ ചെയ്യുക",
   "commandCaptureVisible": "കാണുന്ന ഭാഗം ക്യാപ്ചർ ചെയ്യുക",

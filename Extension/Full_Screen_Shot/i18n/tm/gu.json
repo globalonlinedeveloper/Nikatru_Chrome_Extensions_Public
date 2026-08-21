@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - આખા પેજનું સ્ક્રીન કૅપ્ચર",
   "appShortName": "FullShot",
-  "appDescription": "આખું પેજ, દેખાતો ભાગ, પસંદ કરેલો વિસ્તાર કે કોઈ પણ એલિમેન્ટ કૅપ્ચર કરો. નોંધ ઉમેરો અને સ્માર્ટ પેજ વિભાજન સાથે PNG, JPEG, WebP કે PDF માં એક્સપોર્ટ કરો.",
+  "appDescription": "આખું પેજ, દેખાતો ભાગ, પસંદ કરેલો વિસ્તાર કે કોઈ પણ એલિમેન્ટ કૅપ્ચર કરો. નોંધ ઉમેરો અને PNG, JPEG, WebP કે PDF માં એક્સપોર્ટ કરો.",
   "actionDefaultTitle": "FullShot - પેજ કૅપ્ચર કરો (Alt+Shift+P)",
   "commandCaptureFullPage": "આખું પેજ કૅપ્ચર કરો",
   "commandCaptureVisible": "દેખાતો ભાગ કૅપ્ચર કરો",

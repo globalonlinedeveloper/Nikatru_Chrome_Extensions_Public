@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – posnetek celotne strani",
   "appShortName": "FullShot",
-  "appDescription": "Zajemite celotno stran, vidni del, izrez ali posamezen element. Urejanje, oznake in izvoz v PNG, JPEG, WebP ali PDF s pametno delitvijo.",
+  "appDescription": "Zajemite celotno stran, vidni del, izrez ali posamezen element. Urejanje, oznake in izvoz v PNG, JPEG, WebP ali PDF.",
   "actionDefaultTitle": "FullShot – zajemi stran (Alt+Shift+P)",
   "commandCaptureFullPage": "Zajemi celotno stran",
   "commandCaptureVisible": "Zajemi vidni del",

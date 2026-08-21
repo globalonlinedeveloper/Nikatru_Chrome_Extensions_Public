@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Fånga hela sidan, det synliga området, ett utsnitt eller ett enskilt element. Redigera, kommentera och exportera som PNG, JPEG, WebP eller PDF med smart siduppdelning."
+    "message": "Fånga hela sidan, det synliga området, ett utsnitt eller element. Redigera, kommentera och exportera som PNG, JPEG, WebP eller PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot – fånga sidan (Alt+Shift+P)"

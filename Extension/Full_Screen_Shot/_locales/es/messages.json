@@ -1,12 +1,12 @@
 {
   "appName": {
-    "message": "FullShot: captura de pantalla de página completa"
+    "message": "FullShot: captura de página completa"
   },
   "appShortName": {
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Captura la página completa, el área visible, una región o cualquier elemento. Edita, anota y exporta a PNG, JPEG, WebP o PDF con división inteligente de páginas."
+    "message": "Captura la página completa, el área visible, una región o cualquier elemento. Edita, anota y exporta a PNG, JPEG, WebP o PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot: capturar página (Alt+Shift+P)"

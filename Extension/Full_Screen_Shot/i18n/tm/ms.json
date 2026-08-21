@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Tangkapan Skrin Halaman Penuh",
   "appShortName": "FullShot",
-  "appDescription": "Tangkap halaman penuh, kawasan yang kelihatan, kawasan pilihan atau mana-mana elemen. Sunting, anotasi dan eksport sebagai PNG, JPEG, WebP atau PDF dengan pembahagian halaman pintar.",
+  "appDescription": "Tangkap halaman penuh, kawasan kelihatan, kawasan pilihan atau elemen. Sunting, anotasi dan eksport ke PNG, JPEG, WebP atau PDF.",
   "actionDefaultTitle": "FullShot - Tangkap halaman (Alt+Shift+P)",
   "commandCaptureFullPage": "Tangkap halaman penuh",
   "commandCaptureVisible": "Tangkap kawasan yang kelihatan",

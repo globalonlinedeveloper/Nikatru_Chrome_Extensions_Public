@@ -1,7 +1,7 @@
 {
   "appName": "FullShot - Volledige pagina vastleggen",
   "appShortName": "FullShot",
-  "appDescription": "Leg de hele pagina, het zichtbare deel, een gebied of elk element vast. Bewerk, annoteer en exporteer als PNG, JPEG, WebP of PDF met slimme paginasplitsing.",
+  "appDescription": "Leg de hele pagina, het zichtbare deel, een gebied of elk element vast. Bewerk, annoteer en exporteer als PNG, JPEG, WebP of PDF.",
   "actionDefaultTitle": "FullShot - Pagina vastleggen (Alt+Shift+P)",
   "commandCaptureFullPage": "Hele pagina vastleggen",
   "commandCaptureVisible": "Zichtbaar deel vastleggen",

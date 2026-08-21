@@ -70,7 +70,32 @@ web-ext-artifacts/
 # NOTE: `**/publish/*.zip` is deliberately NOT ignored. Each release zip is a
 # golden master — the exact artifact a store received, and what pack.mjs diffs
 # the next build against. templates/tool/publish/skeleton-0.0.1.zip is tracked for
-# that reason. Real release zips still belong on Releases, not here.
+# that reason.
+#
+# 🔴 THE SENTENCE THAT USED TO END THIS BLOCK IS DELETED, BECAUSE IT
+# CONTRADICTED THE THREE ABOVE IT. It read: "Real release zips still belong on
+# Releases, not here." Beside a rule that deliberately un-ignores them, that
+# reads as "keep them out of git", which is the opposite of what the un-ignore
+# is for — and it is the sentence that made the disagreement with
+# Extension/Full_Screen_Shot/.gitignore look like a matter of taste rather than
+# a defect. It was neither. Measured 2026-08-20: the nested file's bare `*.zip`
+# won for everything beneath it, so scripts/pack.mjs's dropped-file floor
+# graded ZERO entries for the only real tool in this repo, for the whole life
+# of the repo, and said so in its own output on every run.
+#
+# The two purposes are not in competition and are both true:
+#   · GITHUB RELEASES is how a zip is DISTRIBUTED — release.yml attaches
+#     dist/*.zip to the tag, and that is where anyone else gets one.
+#   · publish/*.zip in git is how a zip is COMPARED — pack.mjs floor 3 needs
+#     the previous artifact ON DISK to prove no file was silently dropped from
+#     the next one. A GitHub Release asset is not on disk at build time.
+# Same bytes, two jobs. Doing one does not excuse skipping the other.
+#
+# ⚠️ Nothing is retroactively committed by this. There are ZERO releases, so
+# there is no golden master to anchor yet; the first real release supplies it,
+# and pack.mjs keeps printing "graded 0 entries … NOT a clean diff" until then.
+# Any *-firefox.zip predating 2026-08-18 must never be tracked OR uploaded —
+# see Extension/Full_Screen_Shot/publish/STALE-FIREFOX-ARTIFACTS-2026-08-20.md.
 
 # ── dependencies ────────────────────────────────────────────────────────
 node_modules/
@@ -84,13 +109,25 @@ package-lock.json.bak
 coverage/
 
 # ── owner-private material kept OUT of a public repo ────────────────────
-# These live in Project_Cross_browser_Extensions_Private.
+# These live in Nikatru_Extensions_Private — a SIBLING directory under Projects/,
+# not a child of this one. 📖 The rule for what goes where is now written down at
+# docs/PUBLIC-PRIVATE.md; this file only enforces it.
 #
-# 🔴 `private/` IS THAT REPOSITORY, CLONED IN PLACE — a separate git repo nested
-# inside this one, the same arrangement the Flutter product uses for company/ and
-# knowledge/. Nesting is what makes the split usable day to day: the spec sits
-# beside the code it specifies, so a session can read both without leaving the
-# folder.
+# 🔴 THE REPO NAME ABOVE WAS WRONG UNTIL 2026-08-20, AND IT IS THE THIRD DEAD NAME
+# IN THE STACK. This line read `Nikatru_Chrome_Extensions_Private`, itself a
+# correction of `Project_Cross_browser_Extensions_Private`. Both are dead: the
+# owner dropped `Chrome` from all four repo names on 2026-08-19, and nothing in
+# either tree recorded it. ⚠️ A rename FREES the old name and GitHub keeps
+# answering 200 through a redirect until something re-claims it — so a dead name
+# in a comment reads as correct right up until the day it silently is not.
+# Confirm a repo name with `gh repo list`, NEVER `gh api repos/<owner>/<name>`.
+#
+# 🔴 `private/` AS A NESTED CLONE IS NOT THE ARRANGEMENT IN EFFECT, and the
+# paragraph that used to stand here described one as though it were. There is no
+# `private/` directory on disk; the two repositories are siblings. The rule is
+# kept — a future clone-in-place must not become committable by accident — but do
+# not read it as a description of the layout. `ci.yml` and `scripts/secret-scan.mjs`
+# also name `private/`, and are correct for the same defensive reason.
 # It MUST stay ignored. Git does not descend into a nested repo, but without this
 # line `git add -A` stages the DIRECTORY as a gitlink — and a reader of the public
 # repo then sees a commit hash pointing at a repository they cannot fetch, which
@@ -111,9 +148,14 @@ private/
 #
 # What happened to the exposure, stated as it now stands rather than as it stood
 # when this block was written: the remote was DELETED AND RECREATED EMPTY, so the
-# history that carried them is gone rather than merely superseded — measured,
-# `git ls-remote --heads origin` returns nothing at all, and the local
-# `origin/main` is a stale cache of a branch that no longer exists anywhere. The
+# history that carried them is gone rather than merely superseded — measured ON
+# THE DAY, `git ls-remote --heads origin` returned nothing at all, and the local
+# `origin/main` was a stale cache of a branch that no longer existed anywhere.
+# ⚠️ THAT MEASUREMENT IS A DATED RECORD AND IS NO LONGER TRUE OF TODAY: the
+# remote was repopulated and now carries branches and history again. The claim is
+# kept in the past tense rather than deleted, because it is the evidence that the
+# leaked history is gone; it is corrected here because a present-tense "returns
+# nothing at all" would be read as a live fact and re-measured to the opposite. The
 # earlier wording here said they "reached the public repo … before being removed",
 # which described a cleanup commit on top of a live history and is no longer what
 # is true. Nothing about the rules below changes: the history was destroyed by an

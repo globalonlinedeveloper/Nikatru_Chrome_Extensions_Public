@@ -35,7 +35,7 @@ the source of truth those two copy from, and the rules below.
 | Specified but not built | **10** modules (12 files) |
 | Built but not on that list | **2** files (`storage.js`, `jobs.js`) — real implementations existed, so they were promoted |
 | Node-side dev helpers built | **3** (never shipped) |
-| Core's own sims (`core/test/`) | **0** — CI is red on this; see [Known gaps](#known-gaps) |
+| Core's own sims (`core/test/`) | **3** — one per shipped module, plus `coverage.node.js`, the guard that they exist |
 
 Everything here was **promoted from working code that already existed on disk**. Nothing in `core/` was
 written from a description. The architecture expected `ns.js`, `msg.js` and `ui/tokens.css` to land first;
@@ -139,7 +139,48 @@ loaded and exercised once on Node 24.18.0 after promotion —
   `skMigrateSettings`, `skInitSettings`, `skOnSettingsChanged`) and its three key lists
   (`SK_SYNC_KEYS`, `SK_LOCAL_KEYS`, `SK_INTERNAL_KEYS`).
 
-That is a one-shot smoke check run by hand, not a suite. It is not `core/test/`, and it does not run in CI.
+That was a one-shot smoke check run by hand, not a suite, and it is not what `core/test/` now holds — the
+sims below load the same files and grade behaviour rather than presence. It is left on the record because
+it is what the 0.1.0 promotion was actually verified by.
+
+### `core/test/` — the sims, and what makes them sims rather than smoke
+
+One file per shipped module, run by the `core sims` job in `.github/workflows/ci.yml` and by
+`node core/test/<name>.node.js` locally from anywhere.
+
+| File | Covers | Assertions |
+|---|---|---|
+| `jobs.node.js` | `v1/jobs.js` | 61 |
+| `settings.node.js` | `v1/settings.js` | 66 |
+| `storage.node.js` | `v1/storage.js` | 79 |
+| `coverage.node.js` | the rule itself — see below | 40 |
+| `harness.js` | not a sim: the fakes. **Deliberately not named `*.node.js`**, because the CI glob would run it as one and grade an empty run as a pass. | — |
+
+Three properties are worth knowing before reading them:
+
+- **They load the real file.** `harness.loadCore()` reads `core/v1/<module>.js` off disk and runs it in a
+  fresh `vm` context. Only what the module *talks to* is fake — `chrome.storage`, IndexedDB,
+  `navigator.storage` — and each fake records its traffic, so "did it write?" is asserted and not inferred.
+- **Each carries an EXECUTED failing case, not a remembered one.** Admission rule 6 asks for a recorded
+  failing case. Every sim ends in a `TEETH` section that mutates the real source text, reloads the mutant,
+  and asserts the corresponding check now goes red. A mutation that changes nothing is reported as a
+  failure of the sim, because a check that passes against broken source is not testing what it claims. If
+  a mutation's search string ever stops matching — a refactor moved the line — `harness.mutate()` throws
+  rather than letting the teeth quietly point at nothing.
+- **`coverage.node.js` is the guard on the guards.** `ci.yml` tests `[ ${#sims[@]} -eq 0 ]`, which is the
+  right check for *no sims at all* and the wrong one for everything after: a single file would buy a
+  permanent green no matter how many modules landed later. So the one-sim-per-module rule lives in a file
+  the same glob runs. It derives what needs a sim from `core.json` (built, and not marked
+  `"shipped": false`) rather than from a list here, re-derives every number in `core.json` → `counts`, and
+  recomputes the `sha256` behind every *promoted, byte for byte* claim.
+
+Two things the sims deliberately do **not** do. They do not `require()` anything under `templates/` —
+`core/` is vendored *into* tools and must not depend on a consumer, and the two trees are under different
+licences. And they do not edit `core/v1/**` to make a test pass: those files are byte-for-byte promotions
+with their source `sha256` on record, so a behaviour worth changing is changed upstream in
+`templates/tool/lib/` and re-promoted. `storage.node.js` pins one such edge in place rather than fixing it
+locally — `estimate()` reports an explicitly `null` quota as `0` rather than "unknown", because
+`Number(null)` is `0` and `0` is finite.
 
 ---
 
@@ -156,7 +197,9 @@ That is a one-shot smoke check run by hand, not a suite. It is not `core/test/`,
 4. **Zero npm runtime dependencies. Forever.**
 5. **Additive-only within a channel.** A breaking change becomes `core/v2/` beside `core/v1/`; existing
    tools keep running unchanged.
-6. **Every core module ships with a Node sim in `core/test/`.** Not satisfied today — see below.
+6. **Every core module ships with a Node sim in `core/test/`.** Satisfied since 2026-08-15, and enforced
+   by `core/test/coverage.node.js` rather than by remembering: a new module under `core/v1/` fails the
+   `core sims` job until its sim exists.
 
 Deliberately **not** core: the capture/scroll-unroll engine, PDF export, GIF/WebM encoding, the editor,
 beautify, the batch queue. Single-consumer, large and opinionated; freezing them behind a shared API would
@@ -168,16 +211,20 @@ ossify the code that most needs to keep changing.
 
 These are the reasons this is 0.1.0. Each is a real hole, stated so nobody has to discover it.
 
-1. 🔴 **`core/test/` does not exist, and CI is red on `core/` because of it.** The `core sims` job in
-   `.github/workflows/ci.yml` runs `node scripts/lint.mjs core` (6 files, passing), then globs
-   `core/test/*.node.js`, finds none, prints
-   `::error::core/ exists but core/test/ holds no sims — every core module ships with one.` and **exits 1**.
-   That is the gate working as designed: the job was written so an empty glob *fails*, precisely because a
-   loop over zero files that exits 0 is indistinguishable from a passing one. Do not read the red as
-   noise — admission rule 6 is unmet for all three modules and the build says so.
-   The three promoted modules do have coverage where they came from — `templates/tool/test/skeleton-sim.node.js`
-   names `lib/settings.js` 20 times, `lib/storage.js` 13 and `lib/jobs.js` 5 — but that suite loads the
-   skeleton's copies, not these, and nothing points it at `core/`.
+1. ✅ **CLOSED 2026-08-15 — `core/test/` exists and the `core sims` job passes.** It was the gate working
+   as designed, not noise: the job was written so an empty glob *fails*, precisely because a loop over zero
+   files that exits 0 is indistinguishable from a passing one. Nothing in `.github/workflows/ci.yml`
+   changed to clear it; three sims and a coverage guard landed.
+   Two corrections while this entry is being rewritten. **The `::error::` line quoted here was never a
+   quotation** — the real message -- the `::error::` inside `ci.yml`'s *Lint + run core sims* step -- is longer and differently punctuated, and it was
+   presented verbatim in this file, in `core.json` and in `core/CHANGELOG.md`. And the red would have
+   survived a token fix: `ci.yml` tests `-eq 0`, so one trivial file turns the job green for good, which is
+   why `core/test/coverage.node.js` exists.
+   The observation that made the sims cheap to write is still worth keeping: these three modules already
+   had coverage *where they came from* — `templates/tool/test/skeleton-sim.node.js` names `lib/settings.js`
+   20 times, `lib/storage.js` 13 and `lib/jobs.js` 5 — against files that are byte-identical to these. That
+   suite loads the skeleton's copies and nothing points it at `core/`, so `core/test/` is its own harness
+   rather than a reuse of it; see the note on dependency direction above.
 2. **Nothing vendors core yet, so nothing is hash-checked yet.** `Extension/Full_Screen_Shot/tool.json`
    sets `"core": null` on purpose and has no `vendor/core/` directory. `check-core-sync.mjs` and the
    `ci.yml` step that runs it are wired and currently have no subject. The gate is real; it is idle.
@@ -191,8 +238,10 @@ These are the reasons this is 0.1.0. Each is a real hole, stated so nobody has t
    first real design decision `core/v1` needs, and it is not made. Until it is, treat this as the
    reference copy of a proven implementation.
 5. **`core/dev/` duplicates three files** that still live under `Extension/Full_Screen_Shot/test/pixel-sim/`.
-   Deliberate, explained above, and guarded by nothing but the sha256 in each header, which nothing
-   recomputes.
+   Deliberate and explained above. The sha256 in each header is now recomputed by
+   `core/test/coverage.node.js`, along with the same claim for the three `v1/` modules — all six matched
+   when the check landed. Still unguarded is the *reverse* direction: an edit made in `core/dev/` and not
+   in the tool's copy leaves the tool's sims running different code, and no gate reads the tool's copy.
 
 ---
 

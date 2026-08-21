@@ -3,8 +3,28 @@
    (throttled), stores them in IndexedDB, tracks badge progress, and opens
    the result page when done. */
 
-importScripts('pages/db.js');
-importScripts('pages/batch.js');   // v1.9.7: FSBatch pure core (queue/parse) in the worker
+/* 🔴 GUARDED 2026-08-20, AND WITHOUT THIS THE FIREFOX ADD-ON IS DEAD ON LOAD.
+   Chrome and Edge run this file as an MV3 SERVICE WORKER, where importScripts()
+   is how the two helpers arrive. Firefox ignores background.service_worker and
+   runs the file as one of background.scripts — a classic script, where
+   importScripts is not defined at all. Unguarded, line 1 of the Firefox add-on
+   throws ReferenceError and nothing after it ever runs.
+
+   Nothing rewrites this file on the way into the zip: scripts/pack.mjs copies
+   it verbatim, so what is here is what ships to both stores. The Firefox
+   overlay already lists ["pages/db.js", "pages/batch.js", "background.js"] in
+   background.scripts, so under Firefox the two helpers are ALREADY loaded, in
+   that order, before this file runs — the import is not merely unsafe there,
+   it is redundant. The guard is the whole port.
+
+   `typeof` rather than a try/catch, and BEFORE the first call, because that is
+   also the shape publish/verify-firefox-package.node.js greps for. The sandbox
+   in test/background-sim.node.js supplies a real importScripts(), so the sims
+   take the same branch Chrome does and their coverage is unchanged. */
+if (typeof importScripts === 'function') {
+  importScripts('pages/db.js');
+  importScripts('pages/batch.js');   // v1.9.7: FSBatch pure core (queue/parse) in the worker
+}
 
 /* ---------------- the sentences, in the reader's language (v1.10.1) ---------------- */
 /* Every sentence this worker can say has been translated into all 55 locales

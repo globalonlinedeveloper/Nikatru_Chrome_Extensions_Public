@@ -1,12 +1,12 @@
 {
   "appName": {
-    "message": "FullShot - Captura de pantalla de pàgina sencera"
+    "message": "FullShot - Captura de pàgina sencera"
   },
   "appShortName": {
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Captura la pàgina sencera, l'àrea visible, una regió o qualsevol element. Edita, anota i exporta a PNG, JPEG, WebP o PDF amb divisió intel·ligent de pàgines."
+    "message": "Captura la pàgina sencera, l'àrea visible, una regió o qualsevol element. Edita, anota i exporta a PNG, JPEG, WebP o PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot - Captura la pàgina (Alt+Shift+P)"

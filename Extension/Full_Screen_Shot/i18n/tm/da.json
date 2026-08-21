@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – skærmbillede af hele siden",
   "appShortName": "FullShot",
-  "appDescription": "Tag billeder af hele siden, det synlige område, et udsnit eller et enkelt element. Rediger, tilføj noter og eksportér som PNG, JPEG, WebP eller PDF med intelligent sideopdeling.",
+  "appDescription": "Tag billede af hele siden, det synlige område, et udsnit eller et element. Rediger, marker og gem som PNG, JPEG, WebP eller PDF.",
   "actionDefaultTitle": "FullShot – tag billede af siden (Alt+Shift+P)",
   "commandCaptureFullPage": "Tag billede af hele siden",
   "commandCaptureVisible": "Tag billede af det synlige område",

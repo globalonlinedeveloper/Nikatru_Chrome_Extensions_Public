@@ -6,7 +6,7 @@
     "message": "FullShot"
   },
   "appDescription": {
-    "message": "Chụp toàn trang, vùng hiển thị, vùng chọn hoặc bất kỳ phần tử nào. Chỉnh sửa, chú thích và xuất ra PNG, JPEG, WebP hoặc PDF với khả năng ngắt trang thông minh."
+    "message": "Chụp toàn trang, vùng hiển thị, vùng chọn hoặc bất kỳ phần tử nào. Chỉnh sửa, chú thích và xuất ra PNG, JPEG, WebP hoặc PDF."
   },
   "actionDefaultTitle": {
     "message": "FullShot - Chụp trang (Alt+Shift+P)"

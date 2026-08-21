@@ -1,7 +1,7 @@
 {
   "appName": "FullShot – kogu lehe kuvatõmmis",
   "appShortName": "FullShot",
-  "appDescription": "Jäädvusta kogu leht, nähtav ala, valitud piirkond või üksik element. Redigeeri, lisa märkusi ja ekspordi vormingus PNG, JPEG, WebP või PDF koos nutika lehtedeks jagamisega.",
+  "appDescription": "Jäädvusta kogu leht, nähtav ala, valitud piirkond või element. Redigeeri, lisa märkusi ja ekspordi PNG, JPEG, WebP või PDF.",
   "actionDefaultTitle": "FullShot – jäädvusta leht (Alt+Shift+P)",
   "commandCaptureFullPage": "Jäädvusta kogu leht",
   "commandCaptureVisible": "Jäädvusta nähtav ala",

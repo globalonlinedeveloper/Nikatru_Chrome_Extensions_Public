@@ -1,7 +1,7 @@
 {
   "appName": "FullShot — لقطة شاشة للصفحة كاملة",
   "appShortName": "FullShot",
-  "appDescription": "التقط الصفحة كاملة أو المنطقة الظاهرة أو منطقة محددة أو أي عنصر. حرّر وعلّق وصدّر بصيغة PNG أو JPEG أو WebP أو PDF مع تقسيم ذكي للصفحات.",
+  "appDescription": "التقط الصفحة كاملة أو المنطقة الظاهرة أو منطقة محددة أو أي عنصر. حرّر وعلّق وصدّر بصيغة PNG أو JPEG أو WebP أو PDF.",
   "actionDefaultTitle": "FullShot — التقاط الصفحة (Alt+Shift+P)",
   "commandCaptureFullPage": "التقاط الصفحة كاملة",
   "commandCaptureVisible": "التقاط المنطقة الظاهرة",
