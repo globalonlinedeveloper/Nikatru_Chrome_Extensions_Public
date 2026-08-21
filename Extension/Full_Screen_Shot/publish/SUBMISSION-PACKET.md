@@ -320,3 +320,107 @@ Practical notes:
 10. `web-ext lint` / `run` / `build`, then submit **AMO**.
 11. Tag the release in git (`GIT-SETUP.md` step 12) so the submitted tree is
     permanently identifiable.
+
+---
+
+# APPENDIX A — DATED CORRECTION, 2026-08-22
+
+**Everything above this line is left exactly as written.** It is a dated snapshot and it was
+true of the tree it described. This appendix does not rewrite it; it records, item by item,
+which of its claims are **false today**, what the claim said, and **what was measured instead**
+— by running the thing, on 2026-08-22, with the exit code captured on its own line. Where a
+claim is **still true it is not listed here**, because marking real owner work "done" is the
+more expensive mistake of the two.
+
+Read order: this appendix wins over the body on any point it names. On every point it does
+not name, the body stands.
+
+## A.1 What was re-run, and what it exited
+
+| Command | Exit | What it printed |
+|---|---|---|
+| `node scripts/policy-check.mjs fullshot` | **0** | `15 passed` — including `name/short_name/description within store limits — checked across all 55 locale(s)` and `the Firefox add-on id is set — fullshot@nikatru.com`. It also prints warning(s); **the count is deliberately not recorded**, because `policy-check.mjs` is mid-edit to retire a false-positive locale warning and the same command can honestly print a different number depending on merge order. `EXIT 0` is the stable fact. |
+| `node scripts/check-version.mjs fullshot` | **0** | `3 passed` — `manifest.json declares v1.10.2`, `CHANGELOG top entry is [1.10.2]`, `publish/manifest.firefox.json is an overlay` |
+| `node scripts/check-store-metadata.mjs fullshot` | **0** | `25 passed · 1 owner action(s)`; `3 store row(s) graded, 15 listing file(s) read, across 1 tool(s)`. ⚠️ The owner action is A.4's **O5**, the empty `store/_shared/screenshots/` — a 0 beside a bare pass-count would hide it. |
+| `node scripts/check-core-sync.mjs fullshot` | **0** | `1 passed` |
+| `node scripts/pack.mjs fullshot --target firefox --out <scratch> --release` | **0** | `85 file(s) to pack`, `firefox manifest — publish/manifest.firefox.json applied as a merge patch — gecko.id fullshot@nikatru.com` |
+| `node publish/verify-firefox-package.node.js` (bare, exactly as `ci.yml` invokes it) | **0** | `SOURCE PASSES — NO PACKAGE WAS GRADED` |
+| `node publish/verify-firefox-package.node.js --zip <scratch>/fullshot-firefox.zip` | **0** | `ALL PASS` — 85 entries, packaged manifest === merged Firefox manifest at 1.10.2 |
+| all eleven declared sims, each run separately on Node v24.18.0 | **0** each | ten `test/*.node.js` plus `test/pixel-sim/run.js` |
+| `node scripts/check-store-packages.mjs fullshot` | 0 | ⚠️ **read the print, not the code:** `ZERO PACKAGES WERE PRESENT, so this run proved nothing about any artifact.` **That print is conditional on the subject being absent, which is the state of a fresh checkout** — the script searches `publish/` and `dist/` (`DEFAULT_DIRS`), both of which are empty here. Run it on a machine that has just built, and it opens and grades whatever it finds; `ci.yml`'s `package` job relies on exactly that, invoking it as `--dir dist` four steps after the build. So the *structural* claim — bare, on a clean tree, this gate proves nothing about any artifact — is the durable one; the printed line is what a clean tree makes it say. |
+
+## A.2 Claims in this document that are FALSE today
+
+| Where | What it says | What was measured 2026-08-22 |
+|---|---|---|
+| Header, lines 18–22 | "Package under discussion: **v1.10.1**, built and verified. `publish/fullshot-1.10.1.zip` · `publish/fullshot-1.10.1-firefox.zip`" | The tree is **1.10.2** (`manifest.json` line 5). **Neither zip exists.** All twelve packages in `publish/` were deleted 2026-08-20 — the record is `publish/STALE-FIREFOX-ARTIFACTS-2026-08-20.md`, kept deliberately as the only survivor. `git ls-files \| grep '\.zip$'` returns exactly **one tracked** file and it is `templates/tool/publish/skeleton-0.0.1.zip` (measured 2026-08-22). ⚠️ **Say *tracked*, and mean it.** This sentence first said "a repo-wide `find . -name '*.zip'` returns exactly one" — which is true only on a tree nobody has built in. `find` also sees build output, and `.gitignore` covers `dist/` but not the `dist2/` the determinism check writes, so on a machine that has just built, the same `find` returns the tracked one PLUS one zip per built target in `dist/` and again in `dist2/`. That is not a number this document can pin, which is the point: the tracked count is the one that does not depend on who ran what. It was measured **1** on 2026-08-22 by both commands, on a checkout with no build output present. Packages are built on demand by `scripts/pack.mjs`. |
+| §1, Version row | `1.10.1` | **1.10.2**, in `manifest.json`. `publish/manifest.firefox.json` no longer restates the version at all — it is an RFC 7386 merge patch (511 bytes, five keys) since 2026-08-18, so the two *cannot* drift and `check-version` says so by name. |
+| **O2** — trader status, and §7 step 2 "start Chrome's trader verification immediately — **it is the longest pole** and a hard gate on EEA distribution" | open OWNER work | **DONE for Chrome, and done for over a week.** `nikatru/vendors/google.md` line 32: Chrome Web Store **publisher account LIVE 2026-08-12**, display name **NIKATRU**, publisher id `9e8074da-d51a-4406-a1b2-dd492338415a`, US$5 fee paid, **TRADER declared *and* VERIFIED** through the Google payments profile. The longest pole was pulled on 2026-08-12. ⚠️ One nuance the body could not have known and that is **not** closed: `nikatru/vendors/mozilla.md` records AMO as **not asking** for a trader declaration at signup and records that as *not found in AMO's published policies*, **explicitly not as "not required"** — an obligation could live in the Mozilla Add-on Distribution Agreement, which has not been read. So AMO holds no legal-entity identity for NIKATRU. That is an open **question**, not an open task. |
+| **O3** — "🚧 BLOCKER for AMO. Currently `fullshot@REPLACE-WITH-YOUR-DOMAIN.example` … `verify-firefox-package.node.js` refuses to pass while the placeholder stands" | 🚧 BLOCKER | **DONE.** `gecko.id` is **`fullshot@nikatru.com`**, derived from `publish/identity.json` (`slug` + `ownerDomain`, domain chosen 2026-08-18). `verify-firefox-package.node.js` **PASSES** `gecko.id is NOT the placeholder`, plus the Mozilla email-format limb and the ≤80-character limb (it is 20). `policy-check` and `pack.mjs` assert it independently. The permanence warning in the body is still a true fact about AMO — it just no longer describes an open item. |
+| **O4** — "Store developer accounts ×3 … Register all three" | open OWNER work ×3 | **Two of three are LIVE, both since 2026-08-12.** Chrome: live, fee paid, trader-verified (above). Firefox/AMO: account **created 2026-08-12** on `rajasekar@nikatru.com`, free (`nikatru/vendors/mozilla.md`). **Edge/Microsoft Partner Center is the one genuinely pending account** — see A.4. |
+| **O8** — "Rebuild the Firefox zip after setting the gecko id … `node publish/package.node.js`" | pending on O3 | **Moot as written.** O3 is set, no zip in `publish/` survives to be stale, and every zip is now built fresh. Also the command has moved: `ci.yml` and `release.yml` build with **`scripts/pack.mjs`**; `publish/package.node.js` is still present and still authoritative for its own ALLOW list, but it is not what CI runs. |
+| §2b, Detailed description row | limit **`16,000`** | **Do not restate this number.** `tool.json` `storeMetadata._unverified` and `store/chrome/README.md` both record that the widely-repeated 16,000 appears **nowhere on developer.chrome.com** — `cws-dashboard-listing`, `best-listing`, `prepare` and `program-policies` all describe the field with no number. The gate deliberately refuses to enforce it (`check-store-metadata` prints `2990 chars, no sourced limit`). An invented limit fires on correct input; this factory has already rejected its own fixture that way once. |
+| §4a, BUILD row | "Source `background.js` **still calls `importScripts` unguarded**" | **False.** `background.js` line 24 reads `if (typeof importScripts === 'function') {`. `verify-firefox-package.node.js` PASSES `source background.js guards importScripts` in the *build prerequisite* section. The standing rule under it — build with the packager, never by hand-zipping — is still correct and still worth keeping. |
+| §4a and §6 **N3** — "`verify-firefox-package.node.js` must exit **green**. **It is red today on purpose** and names each blocker" / "red … By design, and correctly red: one OWNER blocker (O3) and one BUILD note" | 🚧 red by design | **EXIT 0, both ways.** Run bare — exactly as `ci.yml` invokes it — it exits 0 with `SOURCE PASSES — NO PACKAGE WAS GRADED`. Run `--zip` against a freshly built package it exits 0 with `ALL PASS` and adds seven assertions the source limb cannot make. Both named blockers are gone: O3 is filled, and the BUILD note is the guard that already passes. |
+| §6 **N1** — "Manifest description is **137 chars**, over the 132 the store displays" | open, cosmetic | **Fixed in 1.10.2.** `policy-check` PASSES `name/short_name/description within store limits — checked across all 55 locale(s)`. `CHANGELOG.md` records the fix: en `appDescription` 137 → 111, longest catalogue now 132, longest locale name 44. The three over-length locale **names** (`ca`, `es`, `es_419`) came down with it. |
+| §6 **N2** — "`shipprobe-DELETE-ME.txt` (0 bytes) at the repo root … Delete it" | housekeeping owed | **Already gone.** `find . -name 'shipprobe*'` over the whole repository returns nothing. |
+| §7 step 3 — "Host the privacy policy … paste that one URL into all three dashboards" | open | **Hosted and live.** `publish/identity.json` carries `https://nikatru.com/fullshot/privacy` (filled 2026-08-21). A GET on 2026-08-22 answered **200 with 0 redirect hops**. `publish/PRIVACY-POLICY.html` has **zero** remaining placeholders and names *Rajasekar Selvam, trading as NIKATRU* and `support@nikatru.com`. The one act left is pasting it into dashboards, which is part of submission itself. |
+
+## A.3 One correction to §7 step 4 and O1 — the LICENSE line, so nobody edits the wrong one
+
+§7 step 4 says *"Fill the LICENSE Required Notice with O1"* and O1 lists `LICENSE` Required Notice
+among five places. **That is still genuinely open and still owner-only.** But `Extension/Full_Screen_Shot/LICENSE`
+has **five** lines matching `Required Notice`, and **four** of them must not be touched. Run it
+yourself — `grep -n 'Required Notice' Extension/Full_Screen_Shot/LICENSE` prints `35, 38, 168, 173, 180`
+(counted 2026-08-22; the file was read, never edited):
+
+- **`:35` and `:38`** sit **above** the horizontal rule at `:166`, inside PolyForm Shield 1.0.0's own
+  §Notices **worked example**. `:38` is the `Copyright Yoyodyne, Inc. (http://example.com)` example
+  text. Lines `:172-173` of that same file say the text above the rule is *"the PolyForm Shield License
+  1.0.0, verbatim and unmodified; do not edit it."*
+- **`:173`** is the tail of that very sentence — *"…do not edit it. The Required Notice line is the one
+  thing this"* — so it **matches the grep while being prose inside the warning itself**. It is a
+  non-editable line, not a fifth candidate.
+- **`:180`** is this repo's explanatory echo of the same example.
+- ✅ **`:168` IS THE ONE FILLABLE SLOT:**
+  `Required Notice: Copyright <OWNER LEGAL NAME OR COMPANY> (<OPTIONAL URL>)`
+  flagged directly beneath at `:170` with `>>> OWNER ACTION — replace the line above BEFORE the first commit. <<<`
+
+The **value** is already settled and already public — `publish/PRIVACY-POLICY.html` line 132 and the
+served page both say *"published by Rajasekar Selvam, trading as NIKATRU"*, and `vendors/google.md`
+records that same name as the Chrome trader-**verified** legal identity. So this is a signature on a
+decided value, not a decision. `templates/tool/LICENSE:1` carries the same slot as
+`⟨LICENSOR⟩ (⟨LICENSOR_URL⟩)` and needs the same line. §4b's requirement to paste `LICENSE` into AMO
+as a **Custom License** (PolyForm Shield is not in AMO's dropdown) is what makes this reach a store.
+
+## A.4 What of this document is STILL OPEN — deliberately left standing above
+
+Not corrected, because measurement says they are real:
+
+- **O1 — legal name.** The *value* is settled and public. The remaining act is the owner writing it
+  onto `LICENSE:168` and `templates/tool/LICENSE:1`. Owner-only: it is a licence grant.
+- **O5 — screenshots and promo tiles.** `store/_shared/screenshots/` holds **`README.md` and nothing
+  else** — zero `.png`/`.jpg`. `check-store-metadata` prints this as an owner action rather than
+  failing, precisely because no store row is served. Still needed: 1–5 shots at 1280×800 (or 640×400,
+  **opaque**), the 440×280 promo tile, the optional 1400×560 marquee, and the **300×300 Edge logo**,
+  which cannot honestly be produced by upscaling a 128px icon. Plus confirmation that
+  `icons/icon128.png` is final art.
+- **O6 — support email.** `support@nikatru.com` is asserted in `publish/identity.json`, in
+  `PRIVACY-POLICY.html` and on the served page, and `store/_shared/support-url.txt` holds the issues
+  URL. What is **not** verifiable from inside this repo is Chrome's account-level requirement that the
+  contact email be **verified** in the dashboard. Leave the row standing until someone looks.
+- **O7 — the on-device QA pass.** Batch capture, Beautify, Scroll→Clip and the `redact-e2e.html`
+  fixture pass the sandbox sims (all eleven EXIT 0 above) and have still never been exercised by hand
+  in a real browser. This gates O5, not the other way round: a screenshot taken before the pass
+  advertises behaviour nobody has watched work, and every store penalises description-vs-behaviour
+  mismatch while the long description names all three features.
+- **§2c Privacy practices tab.** Every answer is drafted and internally consistent. What remains is a
+  human ticking three Limited-Use certification boxes — a legal attestation, not a text field.
+- **Edge / Microsoft Partner Center.** `nikatru/vendors/microsoft.md`: business verification
+  **submitted 2026-08-05**, support case `2608120060000032`, and the last dated observation
+  (2026-08-13 23:47 IST, screenshot) still reads *"Your documents are under review (typically takes 5
+  business days)"* with **`Finish account setup` greyed**. Five business days elapsed **2026-08-20**,
+  so the dashboard is worth re-reading. This blocks **Edge only** — Chrome and AMO are both live.
+- **§7 step 11 — tag the release.** Unchanged and correct. Note for whoever does it: both repos are
+  public and `release.yml` fires on a version tag with a bare `gh release create` and no `--draft`.
+  There is no throwaway tag.

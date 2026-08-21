@@ -118,6 +118,43 @@ Nice to have:
 > The five options below are left as written: they are the comparison that produced
 > the decision, and 3a–3e remain the right menu if the domain is ever given up.
 
+> ### 🔴 CORRECTION APPENDED 2026-08-22 — ITEM 1 OF "STILL OPEN" ABOVE IS CLOSED
+>
+> The blockquote above is a **dated snapshot of 2026-08-21** and is left exactly as
+> written. This correction is appended rather than folded in, so that what the record
+> claimed on the day stays legible.
+>
+> **Item 1 — `identity.json`'s `privacyPolicyUrl` "is STILL EMPTY" and the page is
+> "committed but not yet deployed" — is FALSE, and both halves are false.** It was
+> already false when that text was last read: the value was filled on 2026-08-21 by
+> extensions **PR #17** (commit `6bd9330`, *"fullshot: fill privacyPolicyUrl, now that
+> the URL actually answers"*), i.e. the condition the item set was met and the item was
+> actioned, and no one came back to strike the line. Measured **2026-08-22**, not taken
+> from a note:
+>
+> | What | Command | Result |
+> | --- | --- | --- |
+> | the value | `grep -n privacyPolicyUrl publish/identity.json` | `"privacyPolicyUrl": "https://nikatru.com/fullshot/privacy"` |
+> | the page | `curl -s -o /dev/null -w '%{http_code} %{num_redirects} %{content_type} %{size_download}' https://nikatru.com/fullshot/privacy` | `200 · 0 redirect hops · text/html; charset=utf-8 · 13923 bytes` |
+> | the pasteable copy | `head -1 store/_shared/privacy-policy-url.txt` | the same URL |
+>
+> So the page **is** deployed, the URL **does** answer, `identity.json` **is** filled,
+> and `store/_shared/privacy-policy-url.txt` agrees with it — which
+> `check-store-metadata.mjs` now enforces rather than merely checking the file is
+> non-blank. Nothing here is owner work any more.
+>
+> **Item 2 — `LICENSE`'s `Required Notice:` — IS STILL OPEN and is still owner work.**
+> Unchanged and correct as written above. For the exact line, read
+> `tool.json` `NOTES."LICENSE Required Notice"` **before** opening the file:
+> `grep -n 'Required Notice' Extension/Full_Screen_Shot/LICENSE` returns **five** lines
+> and **four** of the five are PolyForm's verbatim text or prose about it. Only one is
+> fillable, and filling it is an owner act.
+>
+> **Why this was missed for a day.** The value was filled in `identity.json`; the two
+> records that describe it were not, and nothing in the tree can see that a prose
+> sentence and a JSON value disagree. That is the whole reason the correction is
+> appended here in the record itself rather than only in a commit message.
+
 
 Five workable options, honestly compared. Any of them satisfies §2.
 

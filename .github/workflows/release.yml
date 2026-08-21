@@ -41,11 +41,31 @@ jobs:
 
       # Derived from this file, not listed beside it: whatever this workflow
       # actually calls is what gets checked, so the two can never disagree.
+      #
+      # 🔴 THE PATTERN WAS WIDENED 2026-08-22 AND IT HAD TO BE, IN THE SAME
+      # CHANGE THAT ADDED THE AMO STEP BELOW. It used to read
+      # `(scripts)/[a-z0-9][a-z0-9./-]*\.(mjs|node\.js)` — lowercase-only and
+      # anchored on `scripts/` — so it could not match an `Extension/<Tool>/
+      # publish/...` path at ALL: an uppercase directory fails the character
+      # class twice over. The release would have gained a gate its own existence
+      # check was structurally blind to, which is worse than not having the
+      # gate, because the preflight would keep printing a complete inventory
+      # over an incomplete one. Measured before the widening: 12 paths found,
+      # none of them the Extension one.
+      #
+      # This is ci.yml's pattern verbatim -- the `called=$(grep -rhoE ...)` line in
+      # its "Every gate script these workflows call must exist" step -- and the
+      # narrowness there is
+      # deliberate and inherited with it: a general `<something>/publish/
+      # *.node.js` match also hits PROSE — tool-relative paths that do not
+      # resolve from the repo root — and the preflight would then fail a release
+      # over a sentence. Requiring the full `Extension/<Tool>/publish/` prefix
+      # cannot match that.
       - name: Preflight — every gate this release runs must exist
         shell: bash
         run: |
-          set -uo pipefail
-          called=$(grep -ohE '(scripts)/[a-z0-9][a-z0-9./-]*\.(mjs|node\.js)' .github/workflows/release.yml | sort -u)
+          set -euo pipefail  # 🔴 FIXED 2026-08-22; PRE-EXISTING HOLE, and the worst-placed copy of it in the repository. GitHub runs an explicit `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`, so `-e` IS ALREADY ON when this body starts. This line used to read `set -uo pipefail`, which added `-u` and removed nothing — and under `-e` a command whose failure this step means to REPORT kills the shell first, so the report is dead code on the runner. `-e` is spelled out here so the flag a reader sees is the flag that is running, and every reported command below carries its own `||`. Here the reported command is the `called=` grep below: with no match it exits 1 and `-e` killed this step — so `::error::this preflight found no gate-script call in its own workflow`, the line whose job is to stop a release that was never inspected, could not print, and the step's only signal would be a red with no text on the one path that ships bytes to users. `grep -n 'release.yml:[0-9]' scripts/*.mjs` shows why the fix is spelled on existing lines rather than added above them.
+          called=$(grep -ohE '(scripts|Extension/[A-Za-z0-9_]+/publish)/[A-Za-z0-9][A-Za-z0-9._/-]*\.(mjs|node\.js)' .github/workflows/release.yml | sort -u) || true
           if [ -z "$called" ]; then
             echo "::error::this preflight found no gate-script call in its own workflow — its pattern is broken, and it was about to clear a release it never inspected."
             exit 1
@@ -105,6 +125,20 @@ jobs:
       #        which is the strongest form of that claim. It is not added in this
       #        change because it doubles the pack step, and that is a decision
       #        with a cost rather than an oversight.
+      #
+      # 🔴 THE 2026-08-20 PARITY SURVEY ABOVE COUNTED NINE, AND IT MISSED A
+      # TENTH — through its own method, not through carelessness. It found the
+      # gap by diffing the `node scripts/*.mjs` calls in the two files, and the
+      # tool's own AMO gate is a `node Extension/<Tool>/publish/*.node.js` call,
+      # so the pattern that defined the survey's subject could not see it. It was
+      # the single largest instance of the very thing the survey was written to
+      # find: a gate ci ran on every PR and the release did not run at all. It is
+      # added below, and the count above is left as it was measured — the nine
+      # were nine `scripts/` gates and still are.
+      #
+      # Same shape as the preflight's lowercase-only pattern, and the same
+      # lesson: in this repository a check's blind spot is its `grep`, and the
+      # thing hiding in it is reliably the tool-local gate.
       - name: Gates (manifest == CHANGELOG == tag, policy, core sync, lint, store metadata, catalogue)
         run: |
           node scripts/check-version.mjs ${{ steps.tag.outputs.id }} --expect ${{ steps.tag.outputs.version }}
@@ -135,6 +169,83 @@ jobs:
       # uploads.
       - name: The built packages are uploadable
         run: node scripts/check-store-packages.mjs ${{ steps.tag.outputs.id }} --dir dist
+
+      # ── THE TOOL'S OWN AMO GATE, ON THE BYTES THIS TAG SHIPS ───────────────
+      # 🔴 THE RELEASE PATH HAD NEVER OPENED THIS GATE AT ALL. Measured
+      # 2026-08-22: `grep -n 'Extension/' .github/workflows/release.yml` returned
+      # ZERO hits, while ci.yml ran the same script in the `gates` job, in its step
+      # named "The tool's own AMO submission gate (FullShot)" —
+      # on a checkout where Extension/Full_Screen_Shot/.gitignore ignores *.zip,
+      # so it printed `SOURCE PASSES — NO PACKAGE WAS GRADED` and EXITED 0. The
+      # repository's most detailed AMO gate therefore graded no package on any
+      # path, and least of all on the one that ships one.
+      #
+      # Measured the same day against a freshly built dist zip, `--zip` EXITS 0
+      # and adds seven assertions the source limb cannot make: reads as a zip
+      # (85 entries), contains manifest.json, packaged manifest === the merged
+      # Firefox manifest at 1.10.2, contains background.js, packaged
+      # background.js guards importScripts, and no test/dev/scratch files.
+      #
+      # ⚠️ THE SCRIPT EXITS 0 WITH NO PACKAGE, SO THIS STEP CANNOT SIMPLY CALL
+      # IT. Its final line is `process.exit(FAILS ? 1 : 0)` and the missing-zip
+      # branch sets no FAILS — a vanished dist/fullshot-firefox.zip would take
+      # the source-only branch and clear the release with a green tick. Both
+      # halves below are the gate: the file must exist, AND the run must print
+      # `ALL PASS`, which the script emits only when it actually opened a
+      # package. Asserting the positive is deliberate — a tripwire keyed on the
+      # failure wording goes quietly green if that wording changes, and this one
+      # goes loudly red instead.
+      #
+      # ⚠️ "LOUDLY" WAS FALSE WHEN IT WAS WRITTEN, AND THE FIX IS ONE LINE BELOW.
+      # The body used to open `set -uo pipefail`, which does not clear the `-e`
+      # GitHub already set, so the `out=$(node ... )` capture aborted the shell
+      # the instant the gate failed. MEASURED 2026-08-22 on this exact body
+      # against a corrupt dist/fullshot-firefox.zip: under the runner's real
+      # flags, `bash --noprofile --norc -eo pipefail <body>`, EXIT 1 having
+      # printed 0 BYTES — no gate output, and not one word of the `::error::`
+      # two paragraphs below about bytes that cannot be taken back. Under a bare
+      # `bash <body>`, the shell the implementer actually tested in, EXIT 1 and
+      # 4163 bytes. So it went red, and it went SILENTLY red, which on a tag is
+      # the difference between "the AMO gate failed, here is which assertion"
+      # and a red X over an empty log at the one moment nothing can be re-run.
+      # Re-measured after the fix, same corrupt zip, same runner flags: EXIT 1
+      # and 4163 bytes, ending in that `::error::`. Against the real zip built
+      # by `pack.mjs fullshot --target firefox --release` (written without its
+      # `scripts/` prefix on purpose — the preflight above derives its set by
+      # grepping this file's TEXT), EXIT 0 and
+      # 4242 bytes ending `ALL PASS` — so it still discriminates and was not
+      # merely quieted. The sentence above is true now; it is left standing
+      # rather than deleted because the design goal it states was always right —
+      # only the shell flags were wrong.
+      #
+      # The `if:` is per-tool, mirroring ci.yml's "The tool's own AMO submission
+      # gate (FullShot)" step, and that is deliberate
+      # rather than lazy: templates/tool ships a copy of this script into every
+      # new tool, so a second tool adds a second step here instead of inheriting
+      # this one, and only tools with a `targets.firefox` need it at all. The
+      # path is a literal so the preflight above can see it — which is why that
+      # preflight's pattern had to be widened in this same change.
+      - name: The tool's own AMO submission gate, on the built zip (FullShot)
+        if: steps.tag.outputs.id == 'fullshot'
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip="dist/${{ steps.tag.outputs.id }}-firefox.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::$zip does not exist. The pack step above was supposed to write it, so this gate would have graded the source tree and exited 0 over a release that ships a Firefox package."
+            exit 1
+          fi
+          code=0
+          out=$(node Extension/Full_Screen_Shot/publish/verify-firefox-package.node.js --zip "$zip" 2>&1) || code=$?
+          printf '%s\n' "$out"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::the AMO gate exited $code on $zip. These are the exact bytes this tag would upload to addons.mozilla.org, and an accepted-but-wrong upload cannot be taken back."
+            exit "$code"
+          fi
+          if ! printf '%s\n' "$out" | grep -q '^ALL PASS$'; then
+            echo "::error::the AMO gate exited 0 but never printed ALL PASS. Its only other exit-0 path is 'SOURCE PASSES — NO PACKAGE WAS GRADED', i.e. it opened no zip and graded the source tree instead. A pass that inspected no package must not clear a release."
+            exit 1
+          fi
 
       - name: Reference integrity + leak check on every artifact
         run: |

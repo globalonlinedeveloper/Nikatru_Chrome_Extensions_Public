@@ -43,6 +43,9 @@
      directory present but a required file empty-> FAIL, at any served state
      a directory no store declares              -> FAIL    (an orphan listing)
      a limit with no `source`                   -> FAIL    (see below)
+     a URL file that is not an https URL        -> OWNER while unserved, FAIL once served
+     a URL file that disagrees with identity.json-> FAIL, at any served state
+     screenshots/ with no images                -> OWNER while unserved, FAIL once served
      zero stores graded                         -> CANNOT RUN, exit 2
 
    What is owner-gated is CREATING a listing, not KEEPING one. A guard that only
@@ -85,7 +88,44 @@ const args = parseArgs(process.argv.slice(2));
 args.rejectUnknown(['all', 'repo-root']);
 const root = repoRoot(args);
 
-const tools = args.bool('all') ? loadAllTools(root) : [resolveTool(root, args.positional[0])];
+/* 🔴 `--all` HAD NEVER RUN, AND IT IS IN THIS FILE'S OWN USAGE LINE.
+   FOUND AND FIXED 2026-08-22 by running the documented invocation. loadAllTools
+   returns `{ tools, errors, warnings, byId }` — an OBJECT, with no `.length` —
+   so `!tools.length` was `!undefined`, always true, and
+   `node scripts/check-store-metadata.mjs --all` died with
+   "CANNOT RUN — no tool resolved — nothing to grade." on a tree holding one
+   perfectly good tool. Every other caller in scripts/ destructures — the
+   searchable form is `loadAllTools(root)` preceded by `const { tools`, and
+   `grep -n "= loadAllTools(root)" scripts/*.mjs` lists every caller on the day
+   you run it, which is what a line number cannot do. Six did (check-catalog,
+   discover, gen-catalog, lint, new-tool, publish-catalog); this file and
+   check-store-packages.mjs did not.
+   ⚠️ CORRECTED 2026-08-22, later pass: this sentence used to cite each caller
+   by line — "lint.mjs :148, discover.mjs:66, check-catalog.mjs:219,
+   gen-catalog.mjs:52, new-tool.mjs:92, publish-catalog.mjs:193". Five were
+   exact; `publish-catalog.mjs:193` was never right in ANY state a reader can
+   check out. The one anchor that cannot rot is HEAD, so use it:
+   `git show HEAD:scripts/publish-catalog.mjs | grep -n "= loadAllTools(root)"`
+   -> 137. It has only moved further down since, because publish-catalog.mjs was
+   being edited by another pass while this comment was written and by this one
+   afterwards. No working-tree number is quoted here on purpose: the grep above
+   answers for whatever day it is run on. A citation into a moving file is the
+   defect this file's own fix exists to teach. check-store-packages.mjs was carrying the identical `--all`
+   bug and it was fixed the same day; see its own note. It exits 2 rather than 0, so it never
+   passed over an empty subject — but a documented flag that cannot run is a
+   record of a capability that does not exist.
+   `errors` is surfaced rather than dropped, on lint.mjs's shape: a tool.json
+   that will not load must not read as a tool that is not there. */
+let tools;
+if (args.bool('all')) {
+  const all = loadAllTools(root);
+  if (all.errors.length) {
+    die('tool.json problems, so the tool set is not the tree:\n' + all.errors.map((e) => '  - ' + e).join('\n'));
+  }
+  tools = all.tools;
+} else {
+  tools = [resolveTool(root, args.positional[0])];
+}
 if (!tools.length) die('no tool resolved — nothing to grade.');
 
 /* ── the store vocabulary, from the schema ──────────────────────────────────
@@ -119,6 +159,161 @@ let storesGraded = 0;
 let filesChecked = 0;
 
 const charCount = (text) => [...text.trim()].length; // code points, not UTF-16 units
+
+/* ── 🔴 THE SHARED FILES GET GRADED ON CONTENT, NOT ON EXISTENCE ────────────
+   ADDED 2026-08-22, and the defect that produced it was live in this tree for
+   the whole life of the limb above. `privacy-policy-url.txt` was checked for
+   existence and non-blankness only — so it printed
+
+     PASS  Extension/Full_Screen_Shot/store/_shared/privacy-policy-url.txt
+
+   while the file's entire content was the word NOT-YET-HOSTED plus a comment
+   saying "No store submission can proceed until it is reachable". A file whose
+   only purpose is to hold a URL passed a green gate while holding the refusal
+   of one, and `publish/identity.json` had carried the real URL since
+   2026-08-21. Existence checks on a file whose whole content IS the fact are
+   the assertion-that-cannot-fail shape this repository names in its own README.
+
+   The shape assertion is not invented here — `templates/tool/publish/
+   preflight.mjs` already grades identity.json's privacyPolicyUrl with
+   /^https:\/\// and a placeholder test. This is the same test, moved to the
+   copy a human actually pastes into three dashboards.
+
+   TWO DECLARATIONS OF ONE FACT, SO THEY ARE HELD TO EACH OTHER. The URL exists
+   in `publish/identity.json` AND in this file. That is the duplication this
+   guard exists to catch everywhere else (the schema/storeMetadata/listings
+   triangle, and STORE-LISTING.md against store/chrome), so it gets the same
+   treatment rather than an exception.
+
+   AND IT DOES NOT GO PERMANENTLY RED ON OWNER WORK. Hosting a policy is owner
+   work. So an unfilled URL is an OWNER verdict while no store is served, and a
+   FAILURE the moment one is — the same print/fail split `served` already
+   governs for a missing directory. What it can never be again is a PASS. */
+const SHARED_URL_FILES = {
+  /* file -> the publish/identity.json field it must agree with, or null */
+  'privacy-policy-url.txt': 'privacyPolicyUrl',
+  'support-url.txt': null,
+};
+
+/* The file may carry `#` comment lines — FullShot's does, and the dated
+   correction of a stale record belongs beside the value it corrects. The URL is
+   the first line that is neither blank nor a comment, and there must be exactly
+   one of those: a store field takes one URL, and a second line is a second
+   answer to a question that has one. */
+function urlLinesOf(body) {
+  return body.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+}
+const isHttpsUrl = (v) => /^https:\/\/[^\s<>"']+$/.test(v);
+
+/* A read that FAILS is not a result that is EMPTY — the rule policy-check and
+   lib/toolinfo.mjs both state above their own walks. An identity.json that does
+   not parse would otherwise disarm the agreement check below in silence and
+   leave every URL file graded as "nothing to compare against", so it is a
+   FAILURE by name rather than a null.
+
+   🔴 CORRECTED 2026-08-22: PARSING IS NOT THE ONLY WAY THAT READ CAN FAIL.
+   Until this line, the limb caught only a `JSON.parse` throw. `null`, `[]`,
+   `"x"` and `3` are all valid JSON and none of them throws — and every one of
+   them makes `identity[field]` `undefined`, which `gradeUrlFile` below reads as
+   "identity.json declares no URL". That is the disarmed-in-silence state this
+   very comment forbids, reached by the one door it did not watch. Anything that
+   is not a JSON OBJECT is therefore the same named failure.
+
+   The marker is a Symbol, not the `_unparseable` PROPERTY it used to be: a
+   property name can be spelled inside identity.json itself, so a hand-edited
+   file could carry `"_unparseable": "..."` and forge this failure. A Symbol key
+   cannot appear in parsed JSON at all, so the marker can only come from here.
+
+   policy-check.mjs grades the same file with the same two limbs (it fails
+   "publish/identity.json parses" and "publish/identity.json is a JSON object",
+   at its `const idRel = 'publish/identity.json'` block). That is deliberate
+   duplication, not redundancy to be removed: this guard is run on its own by
+   CI and by hand, and a check that only holds when a DIFFERENT script is also
+   run is not a check this script can rely on. */
+const UNUSABLE = Symbol('identity.json unusable');
+function identityOf(tool) {
+  const p = path.join(tool.dirAbs, 'publish', 'identity.json');
+  if (!fs.existsSync(p)) return null;
+  let parsed;
+  try { parsed = JSON.parse(fs.readFileSync(p, 'utf8')); }
+  catch (e) { return { [UNUSABLE]: 'it exists and is not valid JSON: ' + e.message }; }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const what = parsed === null ? 'null' : Array.isArray(parsed) ? 'an array' : 'a JSON ' + typeof parsed;
+    return { [UNUSABLE]: 'it is valid JSON but not a JSON object — it parses as ' + what + ',\n' +
+      'so every field this guard reads from it is `undefined`.' };
+  }
+  return parsed;
+}
+
+function gradeUrlFile(label, body, identityField, identity, anyServed) {
+  const lines = urlLinesOf(body);
+  if (lines.length > 1) {
+    return r.fail(label + ' holds one URL',
+      'it holds ' + lines.length + ' non-comment lines: ' + lines.map((l) => '"' + l + '"').join(', ') + '\n' +
+      'This file is pasted into a store field verbatim. Two lines is two answers.');
+  }
+  const found = lines[0] || '';
+  const declared = identity && !identity[UNUSABLE] && identityField
+    ? String(identity[identityField] ?? '') : '';
+
+  if (!isHttpsUrl(found)) {
+    const why = label + ' holds "' + found + '", which is not an https URL.\n' +
+      'Every store requires a reachable https URL here and pastes it into a public listing.';
+    if (anyServed) {
+      return r.fail(label + ' holds an https URL',
+        why + '\nA store is `served: true` — the listing is live and this field is already public.');
+    }
+    if (declared) {
+      return r.fail(label + ' agrees with publish/identity.json ' + identityField,
+        why + '\npublish/identity.json already declares ' + identityField + ' = "' + declared + '".\n' +
+        'Two declarations of one fact have drifted, and this is the copy a human pastes into the store\n' +
+        'dashboards. Put the URL here, or clear identity.json if it is not really hosted.');
+    }
+    return r.owner(label + ' is not filled in yet',
+      why + '\nNo store is served yet, so this prints rather than blocking the build. Host the policy,\n' +
+      'then write the URL here AND in publish/identity.json' + (identityField ? '.' + identityField : '') + '.');
+  }
+
+  if (declared && declared !== found) {
+    return r.fail(label + ' agrees with publish/identity.json ' + identityField,
+      'store file: "' + found + '"\nidentity.json: "' + declared + '"\n' +
+      'One URL, two files, two values. The store dashboards get this file; every publish/ script gets\n' +
+      'identity.json. Divergent policy URLs across stores are themselves a policy-mismatch finding.');
+  }
+  if (declared) return r.pass(label, found + ' — agrees with publish/identity.json ' + identityField);
+  return r.pass(label, found);
+}
+
+/* ── 🔴 AND THE SCREENSHOTS DIRECTORY IS GRADED ON IMAGES, NOT ON ITS README ──
+   REQUIRED_SHARED lists `screenshots/README.md`, so the whole screenshot
+   requirement was satisfied by a text file explaining that there are no
+   screenshots. `store/_shared/README.md` calls that state a hard blocker in as
+   many words — "No store accepts a listing without at least one screenshot, and
+   there are none" — and nothing could see it. The day a row flips to
+   `served: true`, CI would have stayed green over zero images.
+
+   Count only, deliberately: dimensions and colour depth are asserted nowhere
+   because nothing here has ever read a store's own written limit for them, and
+   this guard REFUSES a limit with no source (see above). One image is the claim
+   that can be sourced — every store's submission form requires it. */
+const SCREENSHOT_EXT = /\.(png|jpe?g)$/i;
+function gradeScreenshots(rel, abs, anyServed) {
+  const dir = path.join(abs, 'screenshots');
+  if (!fs.existsSync(dir)) return; // the README limb above already failed by name
+  const shots = fs.readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && SCREENSHOT_EXT.test(e.name)).map((e) => e.name);
+  if (shots.length) return r.pass(rel + '/screenshots holds at least one image', shots.length + ' image(s): ' + shots.slice(0, 5).join(', '));
+  if (anyServed) {
+    return r.fail(rel + '/screenshots holds at least one image',
+      'the directory holds no .png/.jpg, and a store row is `served: true`.\n' +
+      'No store accepts a listing without at least one screenshot, so a live listing with none here means\n' +
+      'either the images were uploaded and never committed — the listing is now unreproducible — or the\n' +
+      'row was flipped to served before the listing existed.');
+  }
+  return r.owner(rel + '/screenshots holds no images yet',
+    'zero .png/.jpg in the directory. No store row is served, so this prints rather than blocking.\n' +
+    'Capturing them is owner work; every store requires at least one before a listing can be submitted.');
+}
 
 for (const tool of tools) {
   const sm = tool.raw?.storeMetadata ?? tool.storeMetadata;
@@ -259,13 +454,23 @@ for (const tool of tools) {
       if (anyServed) r.fail(rel + ' exists', 'a store is served and the shared listing material is absent.');
       else r.note('NO TREE (no store served): ' + rel + ' — the material every store accepts.');
     } else {
+      const identity = identityOf(tool);
+      if (identity && identity[UNUSABLE]) {
+        r.fail(tool.rel + '/publish/identity.json parses as a JSON object',
+          identity[UNUSABLE] + '\n' +
+          'The URL files below are graded against it. An identity.json this guard cannot read\n' +
+          'must not read as "declares nothing", which would disarm that agreement check without saying so.');
+      }
       for (const f of REQUIRED_SHARED) {
         const fAbs = path.join(abs, f);
         if (!fs.existsSync(fAbs)) { r.fail(rel + '/' + f + ' exists', 'required shared listing file, absent.'); continue; }
         filesChecked++;
-        if (!readText(fAbs).trim()) r.fail(rel + '/' + f + ' is non-empty', 'exists and is blank.');
-        else r.pass(rel + '/' + f);
+        const body = readText(fAbs);
+        if (!body.trim()) { r.fail(rel + '/' + f + ' is non-empty', 'exists and is blank.'); continue; }
+        if (!(f in SHARED_URL_FILES)) { r.pass(rel + '/' + f); continue; }
+        gradeUrlFile(rel + '/' + f, body, SHARED_URL_FILES[f], identity, anyServed);
       }
+      gradeScreenshots(rel, abs, anyServed);
     }
   }
 

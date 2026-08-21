@@ -414,6 +414,92 @@ expect('locales are packaged even when package.include forgets them', {
     writeJson(root, TOOL + '/tool.json', t);
   })
 });
+/* 🔴 PLURAL CATEGORIES — the locale-completeness limb, both directions.
+   Chrome's messages.json has no plural support, so a count-agreeing sentence is
+   spelled one key per CLDR category. Which categories exist differs by language,
+   and until 2026-08-22 this gate did a naive key-set diff: it demanded
+   `itemCountOne` of Japanese, a form Japanese does not have, on every run
+   forever. The cases below pin the exemption from BOTH sides, and every one of
+   them is graded through `--warnings-as-errors` on purpose — this limb warns
+   rather than fails, so an exit code is the only thing that can tell "reported"
+   from "not reported" apart. The base fixture exits 0 under that flag, so a 1
+   here is this limb and nothing else.
+
+   `en` = one|other · `ja` = other alone · `ru` = one|few|many|other.
+   Read from Intl.PluralRules at run time, exactly as the gate reads it. */
+const dropKeys = (obj, keys) => {
+  const o = JSON.parse(JSON.stringify(obj));
+  for (const k of keys) delete o[k];
+  return o;
+};
+function withPlurals(mutate = () => {}) {
+  return fixture(root => {
+    const en = readJson(root, TOOL + '/_locales/en/messages.json');
+    en.itemCountOne = { message: 'one item' };
+    en.itemCountOther = { message: 'several items' };
+    /* NOT a plural: `stepOne` has no `stepOther`, so the base's category set in
+       the default locale is {one}, not en's {one, other}. A suffix is a
+       spelling, not a semantic — the tool's own plurals.mjs records this family
+       paying for that confusion once already. */
+    en.stepOne = { message: 'Step one' };
+    writeJson(root, TOOL + '/_locales/en/messages.json', en);
+    writeJson(root, TOOL + '/_locales/ja/messages.json', dropKeys(en, ['itemCountOne']));
+    writeJson(root, TOOL + '/_locales/ru/messages.json',
+      Object.assign(dropKeys(en, []), { itemCountFew: { message: 'few' }, itemCountMany: { message: 'many' } }));
+    mutate(root);
+  });
+}
+expect('a CLDR category the locale does NOT have is not a missing key', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 0,
+  contains: 'plural-aware: 1 key(s) across 1 locale(s) were NOT counted as missing',
+  root: withPlurals()
+});
+expect('a genuinely missing key in the same locale is STILL reported', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (itemCountOther',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ja/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ja/messages.json'), ['itemCountOther']));
+  })
+});
+expect('a key that merely ENDS in One is not exempted', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (stepOne',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ja/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ja/messages.json'), ['stepOne']));
+  })
+});
+/* The other direction, and it is the one a key-set diff can NEVER see: `ru`
+   needs `itemCountFew`, and `en` has no such key to diff against. Nothing falls
+   back either — chrome.i18n resolves it to the empty string. */
+expect('a plural form the DEFAULT locale does not have is reported when a locale needs it', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: '1 plural form(s) absent (itemCountFew',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ru/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ru/messages.json'), ['itemCountFew']));
+  })
+});
+
+/* 🔴 AND THE CONVENTION THIS GATE MUST NOT BREAK. The corpus records a SECOND,
+   incompatible plural strategy (pipeline/06-i18n.md I-4): the skeleton emits all
+   SIX CLDR forms into EVERY catalogue so `_other` is a real fallback, and a
+   plain key-set parity check is exactly right for that tree. The family
+   recovery above declines such a base by construction — six suffixes in `en` is
+   not `en`'s own set of two — so a tool following that convention is graded
+   with no exemption at all, as it was before this change. This case is the pin
+   on that, because widening the exemption to "any base with plural suffixes"
+   would silently stop grading those trees. */
+expect('a tool that emits all six forms into every locale keeps the plain parity check', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (itemCountOne',
+  root: fixture(root => {
+    const en = readJson(root, TOOL + '/_locales/en/messages.json');
+    for (const s of ['Zero', 'One', 'Two', 'Few', 'Many', 'Other']) en['itemCount' + s] = { message: s };
+    writeJson(root, TOOL + '/_locales/en/messages.json', en);
+    const ja = JSON.parse(JSON.stringify(en));
+    delete ja.itemCountOne;
+    writeJson(root, TOOL + '/_locales/ja/messages.json', ja);
+  })
+});
+
 expect('an underscore-prefixed root directory fails', {
   script: 'policy-check.mjs', argv: ['goodtool'], code: 1, contains: 'reserved for use by the system',
   root: fixture(root => {
@@ -893,6 +979,13 @@ function withStores(mutate = () => {}) {
     writeJson(root, TOOL + '/publish/manifest.firefox.json', {
       browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
     });
+    /* The URL files are a SECOND copy of what identity.json declares, so the
+       fixture carries both — a drift check with only one side present is not a
+       drift check, it is an existence check wearing one. */
+    writeJson(root, TOOL + '/publish/identity.json', {
+      slug: 'goodtool', ownerDomain: 'example.test', supportEmail: 'support@example.test',
+      privacyPolicyUrl: SHARED_FILES['privacy-policy-url.txt'],
+    });
     t.storeMetadata = {
       sharedDir: 'store/_shared',
       stores: {
@@ -906,6 +999,10 @@ function withStores(mutate = () => {}) {
       for (const [f, body] of Object.entries(STORE_FILES)) w(root, TOOL + '/' + d + '/' + f, body + '\n');
     }
     for (const [f, body] of Object.entries(SHARED_FILES)) w(root, TOOL + '/store/_shared/' + f, body + '\n');
+    /* A real PNG, so the screenshots limb's PASS path is exercised too and the
+       mutations below are the only thing that can empty the directory. */
+    fs.copyFileSync(path.join(REPO, 'templates', 'tool', 'icons', 'icon128.png'),
+      path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png'));
     mutate(t, root);
     writeJson(root, TOOL + '/tool.json', t);
   });
@@ -979,6 +1076,112 @@ expect('a value under a SOURCED minimum is caught', {
   root: withStores(t => {
     t.storeMetadata.stores.edge.limits = { 'title.txt': { min: 250, source: 'https://learn.microsoft.com/x (fetched 2026-08-20)' } };
   })
+});
+
+/* 🔴 THE CONTENT MUTATIONS ON THE SHARED URL FILES.
+   Until 2026-08-22 these files were graded on existence and non-blankness
+   alone, and the real tree shipped a `privacy-policy-url.txt` whose entire
+   content was the word NOT-YET-HOSTED plus a comment saying no submission could
+   proceed — printing PASS the whole time, a day after identity.json had been
+   filled with the live URL. Every case below is red against that version of the
+   guard and green against this one. */
+expect('a URL file holding a refusal notice instead of a URL is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'which is not an https URL',
+  root: withStores((t, root) => { w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'NOT-YET-HOSTED\n'); })
+});
+expect('a URL file that disagrees with publish/identity.json is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'One URL, two files, two values',
+  root: withStores((t, root) => { w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'https://example.test/other-privacy\n'); })
+});
+expect('a URL file holding two URLs is caught — a store field takes one', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'Two lines is two answers',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'https://example.test/privacy\nhttps://example.test/privacy2\n');
+  })
+});
+/* The file may carry a dated correction beside the value — the real tree's does
+   — so a `#` comment must not be read as a second URL. */
+expect('a # comment beside the URL is not a second URL', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'agrees with publish/identity.json privacyPolicyUrl',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '# CORRECTED 2026-08-22, was NOT-YET-HOSTED\nhttps://example.test/privacy\n');
+  })
+});
+/* Hosting is owner work, so an unfilled URL PRINTS while nothing is served and
+   FAILS the moment a listing is live — the same split `served` already governs.
+   A guard permanently red on one person's work teaches everyone red is
+   negotiable; a guard green over a live wrong listing teaches nothing at all. */
+expect('an unfilled URL with identity.json ALSO unfilled is an OWNER action, not a failure', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'is not filled in yet',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '⟨HTTPS URL OF THE HOSTED PRIVACY POLICY⟩\n');
+    const id = readJson(root, TOOL + '/publish/identity.json');
+    delete id.privacyPolicyUrl;
+    writeJson(root, TOOL + '/publish/identity.json', id);
+  })
+});
+expect('the SAME unfilled URL FAILS once a store is served', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the listing is live and this field is already public',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '⟨HTTPS URL OF THE HOSTED PRIVACY POLICY⟩\n');
+    const id = readJson(root, TOOL + '/publish/identity.json');
+    delete id.privacyPolicyUrl;
+    writeJson(root, TOOL + '/publish/identity.json', id);
+  })
+});
+
+/* A read that FAILS is not a result that is EMPTY. An identity.json that does
+   not parse would leave every URL file graded as "nothing to compare against" —
+   the agreement check disarmed, in silence, still printing PASS. */
+expect('an unparseable identity.json is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'must not read as',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', '{ oops\n'); })
+});
+/* 🔴 AND THE SAME HOLE ONE LEVEL IN: PARSES ≠ USABLE. `[]`, `null`, `"x"` and
+   `3` are all valid JSON, so the catch above never fires for them — and every
+   one of them makes `identity[field]` undefined, which the grader then reads as
+   "identity.json declares no URL". The drift check is disarmed exactly as an
+   unparseable file would disarm it, in silence, while the URL file still prints
+   a bare PASS. Both cases below exit 0 against the version of the guard shipped
+   earlier in this round and 1 against this one. */
+expect('an identity.json that is an ARRAY is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'it parses as an array',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', '[]\n'); })
+});
+expect('an identity.json that is JSON `null` is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'it parses as null',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', 'null\n'); })
+});
+
+/* 🔴 SCREENSHOTS: the README is not an image. REQUIRED_SHARED lists
+   `screenshots/README.md`, so the entire screenshot requirement used to be
+   satisfied by a text file explaining that there are no screenshots. */
+expect('a served listing with zero screenshots is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the directory holds no .png/.jpg, and a store row is `served: true`',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    fs.rmSync(path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png'));
+  })
+});
+expect('the SAME empty screenshots directory is an OWNER action while nothing is served', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'holds no images yet',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png')); })
+});
+
+/* 🔴 THE DOCUMENTED `--all` INVOCATION, WHICH HAD NEVER RUN. loadAllTools
+   returns an object, not an array, so `!tools.length` was always true and the
+   flag in this guard's own usage line died with "no tool resolved" on a tree
+   holding a complete store layer. No case covered it, which is why it survived.
+   The second limb is the half that matters more: --all must not swallow a
+   tool.json that will not load. */
+expect('--all grades the tree instead of refusing to run', {
+  script: 'check-store-metadata.mjs', argv: ['--all'], code: 0, contains: '3 store row(s) graded',
+  root: withStores()
+});
+expect('--all refuses when a tool.json will not load, rather than grading a shorter tree', {
+  script: 'check-store-metadata.mjs', argv: ['--all'], code: 2, contains: 'the tool set is not the tree',
+  root: withStores((t, root) => { w(root, 'Extension/Broken_Tool/tool.json', '{ oops\n'); })
 });
 
 /* Anti-vacuity. */

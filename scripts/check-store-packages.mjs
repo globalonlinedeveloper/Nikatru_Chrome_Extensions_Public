@@ -101,9 +101,29 @@ const args = parseArgs(process.argv.slice(2));
 args.rejectUnknown(['dir', 'all', 'repo-root']);
 const root = repoRoot(args);
 
-const tools = args.bool('all')
-  ? loadAllTools(root)
-  : [resolveTool(root, args.positional[0])];
+/* 🔴 `--all` HAD NEVER RUN HERE EITHER, AND IT IS IN THIS FILE'S OWN USAGE LINE.
+   FOUND AND FIXED 2026-08-22 by running the documented invocation. This is the
+   same bug, in the same shape, that check-store-metadata.mjs fixed earlier the
+   same day — its note names this file as the second site and this is that fix.
+   loadAllTools returns `{ tools, errors, warnings, byId }` — an OBJECT, with no
+   `.length` — so `!tools.length` was `!undefined`, always true, and
+   `node scripts/check-store-packages.mjs --all` died with
+   "CANNOT RUN — no tool resolved — nothing to grade." on a tree holding one
+   perfectly good tool. It exits 2 rather than 0, so it never passed over an
+   empty subject; but a documented flag that cannot run is a record of a
+   capability that does not exist. `errors` is surfaced rather than dropped, on
+   lint.mjs's shape and on the sibling's: a tool.json that will not load must
+   not read as a tool that is not there. */
+let tools;
+if (args.bool('all')) {
+  const all = loadAllTools(root);
+  if (all.errors.length) {
+    die('tool.json problems, so the tool set is not the tree:\n' + all.errors.map((e) => '  - ' + e).join('\n'));
+  }
+  tools = all.tools;
+} else {
+  tools = [resolveTool(root, args.positional[0])];
+}
 if (!tools.length) die('no tool resolved — nothing to grade.');
 
 const searchDirs = args.has('dir') && args.get('dir') !== true ? [String(args.get('dir'))] : DEFAULT_DIRS;
