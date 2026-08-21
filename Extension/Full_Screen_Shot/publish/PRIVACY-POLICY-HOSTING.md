@@ -72,6 +72,90 @@ Nice to have:
 
 ## 3. Where it can live
 
+> ## ✅ DECIDED AND DONE — 2026-08-21 · option **3d, your own domain**
+>
+> **URL: `https://nikatru.com/fullshot/privacy`**
+>
+> The file is served from the platform repo at
+> `Nikatru_Platform_Public/sites/nikatru/fullshot/privacy.html`, which Cloudflare
+> Pages serves at that path as a **200, not a redirect** — the path was chosen so
+> the store-facing URL needs no hop. It is in `sitemap.xml`, carries its own
+> canonical, and passes `check-site-integrity.mjs`.
+>
+> **§1 placeholders are filled.** Effective/updated date `2026-08-21`; developer
+> name **Rajasekar Selvam** (the legal name on GST and Udyam — see
+> `nikatru/business/company-master.md`); contact **support@nikatru.com**, chosen by
+> the owner on 2026-08-21 over `privacy@` and `grievance@` because it already
+> exists, is already monitored, and is already the public address on the site and
+> on the GST/Udyam registrations — which also satisfies §7's own done-check that
+> the policy contact match the store support email. The developer-instruction
+> comment at the top of the file was deleted, per §1.
+>
+> **One edit beyond §1**, and it is worth knowing about: the visible `<footer>`
+> read *"This document is provided as a starting template; ⟨DEVELOPER NAME⟩ is
+> responsible for its accuracy…"*. That sentence is addressed to the DEVELOPER, not
+> the user, and unlike the top comment §1 tells you to delete, it **renders on the
+> page** — a published policy telling a store reviewer it is a starting template
+> undermines the document they opened to verify. Replaced with the publisher
+> identification (`published by Rajasekar Selvam, trading as NIKATRU`). No
+> substantive claim in §§1–12 was changed.
+>
+> 🔴 **STILL OPEN, and both are deliberate:**
+> 1. **`identity.json`'s `privacyPolicyUrl` is STILL EMPTY.** Its own note says a
+>    URL that 404s is worse than a blank because it reads as done — and the page is
+>    committed but **not yet deployed**. Fill it once the URL actually answers.
+> 2. **`LICENSE`'s `Required Notice:` was never filled in** — it still carries
+>    PolyForm's template example (*"Copyright Yoyodyne, Inc."*). §7's done-check
+>    requires *policy name == LICENSE Required Notice == EU DSA trader name*, and
+>    that three-way agreement cannot hold while one of the three is a placeholder
+>    from the template. Not changed here: editing a licence grant is an owner act.
+>
+> ⚠️ **THE COPY IS IN A DIFFERENT REPO FROM THE SOURCE, AND NO GUARD CAN SEE BOTH.**
+> `assert-enforcement-index` prints *"no row carries kind cross-repo"* — there is no
+> cross-repository enforcement anywhere in this platform. A provenance comment in
+> the served file names this one as the source. Edit the source first, then re-copy.
+>
+> The five options below are left as written: they are the comparison that produced
+> the decision, and 3a–3e remain the right menu if the domain is ever given up.
+
+> ### 🔴 CORRECTION APPENDED 2026-08-22 — ITEM 1 OF "STILL OPEN" ABOVE IS CLOSED
+>
+> The blockquote above is a **dated snapshot of 2026-08-21** and is left exactly as
+> written. This correction is appended rather than folded in, so that what the record
+> claimed on the day stays legible.
+>
+> **Item 1 — `identity.json`'s `privacyPolicyUrl` "is STILL EMPTY" and the page is
+> "committed but not yet deployed" — is FALSE, and both halves are false.** It was
+> already false when that text was last read: the value was filled on 2026-08-21 by
+> extensions **PR #17** (commit `6bd9330`, *"fullshot: fill privacyPolicyUrl, now that
+> the URL actually answers"*), i.e. the condition the item set was met and the item was
+> actioned, and no one came back to strike the line. Measured **2026-08-22**, not taken
+> from a note:
+>
+> | What | Command | Result |
+> | --- | --- | --- |
+> | the value | `grep -n privacyPolicyUrl publish/identity.json` | `"privacyPolicyUrl": "https://nikatru.com/fullshot/privacy"` |
+> | the page | `curl -s -o /dev/null -w '%{http_code} %{num_redirects} %{content_type} %{size_download}' https://nikatru.com/fullshot/privacy` | `200 · 0 redirect hops · text/html; charset=utf-8 · 13923 bytes` |
+> | the pasteable copy | `head -1 store/_shared/privacy-policy-url.txt` | the same URL |
+>
+> So the page **is** deployed, the URL **does** answer, `identity.json` **is** filled,
+> and `store/_shared/privacy-policy-url.txt` agrees with it — which
+> `check-store-metadata.mjs` now enforces rather than merely checking the file is
+> non-blank. Nothing here is owner work any more.
+>
+> **Item 2 — `LICENSE`'s `Required Notice:` — IS STILL OPEN and is still owner work.**
+> Unchanged and correct as written above. For the exact line, read
+> `tool.json` `NOTES."LICENSE Required Notice"` **before** opening the file:
+> `grep -n 'Required Notice' Extension/Full_Screen_Shot/LICENSE` returns **five** lines
+> and **four** of the five are PolyForm's verbatim text or prose about it. Only one is
+> fillable, and filling it is an owner act.
+>
+> **Why this was missed for a day.** The value was filled in `identity.json`; the two
+> records that describe it were not, and nothing in the tree can see that a prose
+> sentence and a JSON value disagree. That is the whole reason the correction is
+> appended here in the record itself rather than only in a commit message.
+
+
 Five workable options, honestly compared. Any of them satisfies §2.
 
 ### 3a. GitHub Pages — free, but read the repo-visibility catch

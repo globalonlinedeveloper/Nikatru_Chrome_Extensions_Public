@@ -60,6 +60,15 @@
     "networkAllowlist": []
   },
 
+  "storeMetadata": {
+    "_why": "THE STORE AXIS. `targets` is the BUILD axis and has two entries; this has three, because the chromium build ships to Chrome AND Edge as two separate listings with different limits and different permanent ids. A stamped tool gets this block from scripts/new-tool.mjs so its listings are graded from its first commit — otherwise tool #2 has its store copy hand-typed into a console, which is the outcome the whole factory exists to avoid.",
+    "sharedDir": "store/_shared",
+    "stores": {
+      "chrome":  { "target": "chromium", "dir": "store/chrome",  "served": false },
+      "edge":    { "target": "chromium", "dir": "store/edge",    "served": false },
+      "firefox": { "target": "firefox",  "dir": "store/firefox", "served": false }
+    }
+  },
   "listings": { "chrome": null, "edge": null, "firefox": null },
 
   "absent": {

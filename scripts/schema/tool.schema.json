@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/globalonlinedeveloper/Project_Cross_browser_Extensions/scripts/schema/tool.schema.json",
+  "$id": "https://github.com/globalonlinedeveloper/Nikatru_Extensions_Public/scripts/schema/tool.schema.json",
   "title": "tool.json",
   "description": "The entire coupling surface between a tool and this monorepo. Every gate in scripts/ is driven by this file, so a tool never has to restructure itself to participate. NOTE: this schema is for editor autocomplete and hover docs only. It is NOT the gate — scripts/lib/toolinfo.mjs is, because the checks that matter are cross-file (does the manifest exist, does every listed test path resolve, does the surface match the category directory) and no JSON Schema can express them. If the two ever disagree, toolinfo.mjs is right.",
   "type": "object",
@@ -97,11 +97,31 @@
 
     "listings": {
       "type": "object",
-      "description": "Store URLs, once live. null until then — never a guessed URL.",
+      "description": "Store URLs, once live. null until then — never a guessed URL. THIS IS THE STORE VOCABULARY: check-catalog.mjs derives its host table from these keys, and check-store-metadata.mjs derives the expected storeMetadata.stores key set from them too. Adding a store starts here.",
       "properties": {
         "chrome": { "type": ["string", "null"] },
         "edge": { "type": ["string", "null"] },
         "firefox": { "type": ["string", "null"] }
+      }
+    },
+
+    "storeMetadata": {
+      "type": "object",
+      "description": "The STORE axis. `targets` above is the BUILD axis and has two entries; this has three, because the chromium build ships to Chrome and Edge as two separate listings with different limits, different assets and different permanent ids. Store ids are NOT declared here — they come from `listings` above, and check-store-metadata.mjs holds the two to each other so a fourth list of store names cannot drift.",
+      "properties": {
+        "sharedDir": {
+          "type": "string",
+          "description": "Listing material every store accepts — the 1280x800 screenshot set, the privacy-policy URL. Relative to the tool directory."
+        },
+        "stores": {
+          "type": "object",
+          "description": "One row per STORE. A store with no row is a store nothing checks.",
+          "properties": {
+            "chrome": { "$ref": "#/definitions/storeRow" },
+            "edge": { "$ref": "#/definitions/storeRow" },
+            "firefox": { "$ref": "#/definitions/storeRow" }
+          }
+        }
       }
     },
 
@@ -112,6 +132,28 @@
         "cmd": { "type": "string" },
         "out": { "type": "string" },
         "deps": { "type": "string" }
+      }
+    }
+  },
+
+  "definitions": {
+    "storeRow": {
+      "type": "object",
+      "required": ["target", "dir", "served"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "Which entry of `targets` builds the artifact this store receives. Chrome and Edge both name \"chromium\" — that is what makes the shared build a DECLARATION rather than a coincidence, and it is why three store rows cannot become three builds."
+        },
+        "dir": { "type": "string", "description": "Per-store listing directory, relative to the tool directory." },
+        "served": {
+          "type": "boolean",
+          "description": "A GATE, not membership. false = the row records researched facts for a store not submitted to yet, and a missing directory PRINTS. true = the listing is live and a missing directory FAILS. This is what keeps owner-gated work (accounts, screenshots) from turning CI permanently red."
+        },
+        "manifestPatch": {
+          "type": "string",
+          "description": "Optional RFC 7386 merge patch applied for this STORE rather than this target. Edge requires update_url removed and the name de-Chrome-d; Chrome takes the base build unchanged."
+        }
       }
     }
   }
