@@ -15,8 +15,9 @@
    RUN IN PLACE, IN THE WORKING TREE
 
    Never copy the tool somewhere else first and never tidy up afterwards.
-   ci.yml:302-310 uploads everything under `test/pixel-sim/out/`, at any depth,
-   as an artifact `if: failure()` — and that directory is gitignored, so it
+   ci.yml's `sims` job step "Upload pixel-sim output on failure" uploads
+   everything under `test/pixel-sim/out/`, at any depth, as an artifact
+   `if: failure()` — and that directory is gitignored, so it
    exists on a runner only because a sim just wrote it where the glob can see
    it. A runner that packs the tool into a temp directory produces a
    green-looking upload step with nothing in it, on exactly the runs where the
@@ -71,7 +72,8 @@ const root = repoRoot(args);
 if (args.positional.length > 1) {
   die('more than one tool given: ' + args.positional.map(t => '"' + t + '"').join(', ') +
     '\nThis gate takes exactly ONE — a tool id ("fullshot") or a Category/Tool_Dir. It will not\n' +
-    'pick one of them for you. ci.yml:300 and release.yml:84 each pass a single id.');
+    'pick one of them for you. The "Run tool sims" step in ci.yml and the "Sims" step in\n' +
+    'release.yml each pass a single id.');
 }
 
 const tool = resolveTool(root, args.positional[0]);
@@ -132,8 +134,9 @@ if (unlisted.length) {
 
 /* ---------------- run them ---------------- */
 /* In declared order, and ALL of them even after one fails. fail-fast is off in
-   the matrix (ci.yml:266, :287) for the same reason it is off here: the second
-   failure is usually what tells you whether the first one is the cause or a
+   the matrix -- `grep -n 'fail-fast' .github/workflows/ci.yml` finds it on
+   every one of them -- for the same reason it is off here: the second failure
+   is usually what tells you whether the first one is the cause or a
    symptom, and re-running a 6-minute matrix to find out is a poor trade.
 
    Output is captured and re-printed rather than inherited, so the banner always
@@ -187,8 +190,9 @@ for (const rel of declared) {
      here, a sim that does process.kill(process.pid, 'SIGKILL') comes back as
      status 1 with signal null, because Windows has no signals and node emulates
      the kill with TerminateProcess. It was negative-tested on Linux under node
-     22 instead — the platform ci.yml:291 actually runs — where the same sim
-     comes back signal 'SIGKILL', status null. Do not delete this arm for failing
+     22 instead -- the platform the `sims` job actually runs on, `runs-on:
+     ubuntu-latest` with `node: ['22', '24']` -- where the same sim comes back
+     signal 'SIGKILL', status null. Do not delete this arm for failing
      to reproduce on the wrong OS. */
   if (res.error) {
     die('could not run ' + tool.rel + '/' + rel + ': ' + (res.error.code || '') + ' ' + res.error.message + '\n' +

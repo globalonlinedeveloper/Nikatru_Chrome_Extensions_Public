@@ -13,6 +13,23 @@ breaking change becomes `core/v2/` beside it rather than a new number here.
 
 ## [Unreleased]
 
+### Changed — 2026-08-22 — `ci.yml` is cited by STEP NAME here, not by line
+
+No code changed. Four pointers into `.github/workflows/ci.yml` were rewritten as searchable anchors,
+because all four had gone stale and nothing recomputes a line number:
+
+| Was | Pointed at, measured 2026-08-22 | Now |
+| --- | --- | --- |
+| `ci.yml:254` (this file, the `coverage.node.js` bullet) | a comment line in the `catalogue` job | the `core` job's *Lint + run core sims* step |
+| `ci.yml:255` (this file, the misquote note) | `- name: Delete the catalogue so the publisher has to produce it` | same step |
+| `ci.yml:255` (`core/README.md`) | as above | same step |
+| `ci.yml:255` (`core/core.json`, `gaps` entry) | as above | same step |
+
+The `[ ${#sims[@]} -eq 0 ]` test and the `::error::` they describe are both real, both unchanged, and both
+inside that one step — only the coordinates were wrong. `grep -n 'Lint + run core sims'
+.github/workflows/ci.yml` answers on whatever day it is run. Every claim those four records make about the
+gate re-derives; this entry corrects the address, not the finding.
+
 ### Added — `core/test/`, which clears the 0.1.0 known-red
 
 No module changed, so the version does not move: the number is a claim about how much of the `v1` surface
@@ -27,7 +44,7 @@ exists, and the surface is the same three files. What changed is that they are n
   `core sims` job globs `core/test/*.node.js` and runs every match, so a helper with that suffix would be
   executed as a sim and its zero assertions would read as a pass.
 - `core/test/coverage.node.js` (40 assertions) — the guard on the guards, and the reason a token fix would
-  not have been one. `ci.yml:254` tests `[ ${#sims[@]} -eq 0 ]`: correct for *no sims at all*, useless
+  not have been one. the `core` job's *Lint + run core sims* step in `ci.yml` tests `[ ${#sims[@]} -eq 0 ]`: correct for *no sims at all*, useless
   afterwards, because one file turns the job green however many modules land later. This enforces
   one-sim-per-module, derives what needs a sim from `core.json` (`status: built` and not
   `"shipped": false`) rather than from a list, re-derives every number in `counts`, and recomputes the
@@ -125,7 +142,7 @@ red was correct.
 
 > **A misquote that stood here, and in `core/README.md` and `core/core.json`, until 2026-08-15.** All three
 > presented `::error::core/ exists but core/test/ holds no sims — every core module ships with one.` as a
-> verbatim quotation of the workflow. It is a paraphrase. The real message at `ci.yml:255` continues
+> verbatim quotation of the workflow. It is a paraphrase. The real message -- the `::error::` inside `ci.yml`'s *Lint + run core sims* step -- continues
 > *"…because core has N consumers and a regression there is N outages. core.json's own gaps list names
 > this; it is a known gap, not a surprise, and it is red until the sims exist."* A paraphrase in quotation
 > marks is worse than no quotation: it is what a reader greps for and does not find.

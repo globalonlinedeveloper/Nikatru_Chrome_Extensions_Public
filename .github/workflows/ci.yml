@@ -1,9 +1,21 @@
 name: CI
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Every gate here is a `node scripts/<name>.mjs` call and nothing else, so the
-# identical command runs on a runner and in PowerShell on the owner's machine.
-# That is the whole design: CI is a scheduler, the scripts are the gates.
+# Every gate here is one command — `node scripts/<name>.mjs`, or a tool's own
+# `node Extension/<Tool>/publish/<name>.node.js`, identical on a runner and in
+# PowerShell — EXCEPT the inline shell blocks, of which there are EIGHT.
+# Two greps, both measured 2026-08-22, and they deliberately disagree by one:
+#   grep -cE '^ *run: \|$'           .github/workflows/ci.yml   ->  8
+#   grep -cE '^        shell: bash$' .github/workflows/ci.yml   ->  7
+# The one in the gap is the step named "Show the matrix", which carries no
+# `shell:` key at all, so the anchored form cannot list it. That is an exclusion,
+# not an oversight, and the reason is in this sentence rather than 600 lines
+# below it: the rule above is about GATES, and that step has no failure path —
+# it echoes the tool list and emits a `::notice::`. If you want the exception
+# set, use the first grep; if you want the gates among them, use the second.
+# ⚠️ This header used to say "EXCEPT the 7 inline blocks `grep -cE "^        shell:
+# bash$"` finds", which handed a reader a command returning 7 of 8 and left the
+# reconciliation in a comment near the `selftest` job.
 #
 # This workflow therefore REQUIRES these scripts in scripts/:
 #
@@ -64,7 +76,7 @@ jobs:
       - name: Every gate script these workflows call must exist
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail  # 🔴 FIXED 2026-08-22, AND THE HOLE WAS PRE-EXISTING AT HEAD — IT WAS NOT INTRODUCED BY THE CHANGE THIS COMMENT SHIPS IN. GitHub runs an explicit `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`, so `-e` IS ALREADY ON when this body starts. This line used to read `set -uo pipefail`, which added `-u` and removed nothing — and under `-e` a command whose failure this step means to REPORT kills the shell first, so the report is dead code on the runner. `-e` is spelled out here so the flag a reader sees is the flag that is running, and every reported command below carries its own `||`. Here the reported command is the `called=` grep: with no match it exits 1, pipefail propagates that, and `-e` killed the step before the `::error::` that says THIS CHECK'S OWN PATTERN IS BROKEN could print. MEASURED 2026-08-22, this exact body against an empty .github/workflows: runner flags EXIT 1 and 0 bytes; bare `bash` EXIT 1 and the 168-byte explanation. (Trailing comment rather than a line of its own: 23 `ci.yml:NNN` citations in six other files land in the band below and every line added here moves all of them.)
           # DERIVED, NOT LISTED. The set is read out of the workflow files, so it
           # is exactly what will be invoked — .mjs gates and the .node.js self-test
           # alike. A hand-written list would be a second copy of the same fact, and
@@ -84,7 +96,7 @@ jobs:
           # failed the build over a sentence. Requiring the full
           # `Extension/<Tool>/publish/` prefix cannot match that, and was
           # verified to produce a byte-identical list on the current workflows.
-          called=$(grep -rhoE '(scripts|Extension/[A-Za-z0-9_]+/publish)/[A-Za-z0-9][A-Za-z0-9._/-]*\.(mjs|node\.js)' .github/workflows | sort -u)
+          called=$(grep -rhoE '(scripts|Extension/[A-Za-z0-9_]+/publish)/[A-Za-z0-9][A-Za-z0-9._/-]*\.(mjs|node\.js)' .github/workflows | sort -u) || true  # `|| true` is what lets a no-match reach the `::error::` below instead of ending the step — see the `set -euo` line at the top of this body.
           if [ -z "$called" ]; then
             echo "::error::this check found no gate-script call in .github/workflows at all — its own pattern is broken, and it was about to report a clean inventory over an empty set."
             exit 1
@@ -135,7 +147,7 @@ jobs:
       - name: Cross-check discovery against the filesystem
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail  # 🔴 FIXED 2026-08-22, same pre-existing hole as the gate-inventory job's `set` line above and the same fix. GitHub runs an explicit `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`, so `-e` IS ALREADY ON when this body starts. This line used to read `set -uo pipefail`, which added `-u` and removed nothing — and under `-e` a command whose failure this step means to REPORT kills the shell first, so the report is dead code on the runner. `-e` is spelled out here so the flag a reader sees is the flag that is running, and every reported command below carries its own `||`. Here the reported command is `discover.mjs --all`: a bare `code=$?` after it was unreachable as anything but 0, so `::error::discover.mjs exited N` never printed. MEASURED 2026-08-22 on this exact body with discover.mjs stubbed to `process.exit(3)`: runner flags EXIT 3, 20 bytes, no `::error::`; bare `bash` EXIT 1, 120 bytes, the diagnosis present.
           # templates/ carries a tool.json too — it is the thing a tool is stamped
           # FROM, not a tool: it does not ship, and it has no id a reporter could
           # name. (_skeleton/ was its location before the move recorded in
@@ -154,8 +166,8 @@ jobs:
 
           out="$RUNNER_TEMP/discover-all.txt"
           : > "$out"
-          node scripts/discover.mjs --all --out "$out"
-          code=$?
+          code=0  # ← initialised, and `|| code=$?` below rather than a bare `code=$?`; see this body's `set -euo` line.
+          node scripts/discover.mjs --all --out "$out" || code=$?
           if [ "$code" -ne 0 ]; then
             echo "::error::discover.mjs exited $code — the matrix cannot be trusted, so nothing below it can be either."
             exit 1
@@ -182,14 +194,14 @@ jobs:
       - name: Issue templates list every tool id
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail  # 🔴 FIXED 2026-08-22, same pre-existing hole again. GitHub runs an explicit `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`, so `-e` IS ALREADY ON when this body starts. This line used to read `set -uo pipefail`, which added `-u` and removed nothing — and under `-e` a command whose failure this step means to REPORT kills the shell first, so the report is dead code on the runner. `-e` is spelled out here so the flag a reader sees is the flag that is running, and every reported command below carries its own `||`. Here the reported command is the per-file `node -p` that reads the id: a tool.json that does not PARSE made node exit 1, and the capture then killed the whole loop — no `::error file=`, no dropdown check for any later tool, and no `graded against N tool id(s)` accounting.
           fail=0
           checked=0
           while IFS= read -r f; do
             [ -n "$f" ] || continue
-            id=$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).id || ''" "$f")
+            id=$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).id || ''" "$f") || id=''  # `|| id=''` keeps an unparseable tool.json inside the loop; the message below covers both states because from here they are one state: no usable id.
             if [ -z "$id" ]; then
-              echo "::error file=$f::tool.json has no \"id\" — the id is the stable public handle every tag, zip and matrix entry is built from."
+              echo "::error file=$f::tool.json has no \"id\", or could not be parsed at all — the id is the stable public handle every tag, zip and matrix entry is built from."
               fail=1
               continue
             fi
@@ -425,12 +437,40 @@ jobs:
     # The two targets are fixed here rather than read from tool.json, which is
     # the one place in this workflow where the coupling surface is not tool.json.
     # It is honest about the cost: a tool that cannot build a firefox package
-    # FAILS this leg rather than skipping it. Worth knowing today — FullShot's
-    # tool.json declares targets.firefox.overlay = null, because publish/
-    # manifest.firefox.json is still a full second manifest rather than the
-    # RFC 7386 merge patch pack.mjs expects. Until that conversion lands, the
-    # firefox leg is red for a reason the tree already declares, and the right
-    # fix is the overlay, not a matrix that quietly stops building Firefox.
+    # FAILS this leg rather than skipping it — and if it ever does fail, that is
+    # a finding, not a known state. The right fix would be the overlay, never a
+    # matrix that quietly stops building Firefox.
+    #
+    # ⚠️ CORRECTED 2026-08-22, NOT DELETED — the sentence that stood here from
+    # before the conversion read: "Worth knowing today — FullShot's tool.json
+    # declares targets.firefox.overlay = null, because publish/
+    # manifest.firefox.json is still a full second manifest rather than the RFC
+    # 7386 merge patch pack.mjs expects. Until that conversion lands, the firefox
+    # leg is red for a reason the tree already declares." Both halves measured
+    # FALSE on 2026-08-22: tool.json declares `"firefox": { "overlay":
+    # "publish/manifest.firefox.json" }`, and `node scripts/pack.mjs fullshot
+    # --target firefox --out <dir> --release` EXITS 0, printing that the overlay
+    # was applied as a merge patch with gecko.id fullshot@nikatru.com and 85
+    # entries. The conversion landed 2026-08-18 and is recorded ABOVE in this
+    # same file, in the `gates` job's AMO block — the paragraph beginning
+    # `publish/manifest.firefox.json became an RFC 7386 merge patch on` — so the
+    # file disagreed with itself, and the stale half was the one telling the next
+    # reader that a green leg is expected-red. That is precisely how a real red
+    # gets waved through.
+    # ⚠️ CORRECTED 2026-08-22, SAME DAY — the sentence above said "recorded thirty
+    # lines ABOVE, in this same file, by the `gates` job". MEASURED 2026-08-22 on
+    # the delivered file: that record sat at ci.yml:369 and this comment at :442,
+    # so 73 lines, not thirty. A distance in lines is exactly the kind of number
+    # nothing recomputes, so it is replaced by a SENTENCE a reader can search for
+    # rather than by a corrected count that the next insert would rot again.
+    # ⬜ AND THE POINTER IS ITSELF A HIT, WHICH IS WORTH SAYING OUT LOUD BECAUSE
+    # IT IS THE SAME TRAP ONE STEP DOWN. MEASURED 2026-08-22 after this paragraph
+    # was written: grepping the quoted sentence above returns 2 hits — the record
+    # and this reference to it — and `grep -c 2026-08-18` returns 3 rather than
+    # the 1 it returned before. Quoting a target is what makes an anchor
+    # searchable AND what makes it non-unique; the reader wants the FIRST hit, in
+    # the `gates` job. That is still strictly better than a line count, which
+    # drifts silently instead of announcing itself in the count.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -480,6 +520,57 @@ jobs:
       - name: The built package carries the right store identity
         run: node scripts/check-store-packages.mjs ${{ matrix.tool }} --dir dist
 
+      # ── THE AMO GATE AGAIN, THIS TIME WITH A PACKAGE UNDER IT ──────────────
+      # The `gates` job runs this same script BARE, and measured 2026-08-22 that
+      # run EXITS 0 printing `SOURCE PASSES — NO PACKAGE WAS GRADED`: zips are
+      # gitignored, so on a fresh checkout its package limb opens nothing. Here
+      # dist/ holds a Firefox zip built five steps ago, and pointing the gate at
+      # it adds seven assertions the source limb cannot make — reads as a zip,
+      # contains manifest.json, packaged manifest === the merged Firefox
+      # manifest, contains background.js, packaged background.js guards
+      # importScripts, no test/dev/scratch files.
+      #
+      # ⚠️ THIS IS THE PR-TIME TWIN OF release.yml's step, AND THAT PAIRING IS
+      # THE POINT. The script exits 0 with no package, so both steps have to
+      # assert `ALL PASS` rather than trust the exit code. A tripwire that runs
+      # only when a tag fires has never been observed to work at the moment it
+      # first matters, and a tag cannot be re-run — so the same logic runs on
+      # every PR here, where being wrong is free.
+      - name: The tool's own AMO submission gate, on the built zip (FullShot)
+        if: matrix.tool == 'fullshot' && matrix.target == 'firefox' && matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          # 🔴 `-euo`, NOT `-uo`. GitHub runs an explicit `shell: bash` as
+          # `bash --noprofile --norc -eo pipefail {0}`, so `-e` is ALREADY ON
+          # when this body starts and `set -uo pipefail` only added `-u`. Under
+          # `-e` the capture below aborted the shell the instant the gate
+          # failed, so `code` was unreachable as anything but 0 and the
+          # `printf '%s\n' "$out"` that shows WHY never ran. Measured 2026-08-22
+          # on this exact body against a corrupt dist/fullshot-firefox.zip:
+          # `bash --noprofile --norc -eo pipefail <body>` exited 1 having
+          # printed 0 bytes, while a bare `bash <body>` printed 3976. A step
+          # that fails silently is a check whose diagnostics do not exist. `-e`
+          # is now written where a reader sees it, and the one command whose
+          # exit code this step REPORTS carries `|| code=$?`. Re-measured after
+          # the fix, same corrupt zip, RUNNER flags: EXIT 1 and 3976 bytes — the
+          # log the bare shell used to be needed for. Against the real zip the
+          # same body is EXIT 0 and 4242 bytes ending `ALL PASS`, so the step
+          # still discriminates rather than having been turned green.
+          set -euo pipefail
+          zip="dist/${{ matrix.tool }}-${{ matrix.target }}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::$zip does not exist, though the pack step above reported success — so this gate would have graded the source tree and exited 0 while inspecting no package at all."
+            exit 1
+          fi
+          code=0
+          out=$(node Extension/Full_Screen_Shot/publish/verify-firefox-package.node.js --zip "$zip" 2>&1) || code=$?
+          printf '%s\n' "$out"
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          if ! printf '%s\n' "$out" | grep -q '^ALL PASS$'; then
+            echo "::error::the AMO gate exited 0 but never printed ALL PASS. Its only other exit-0 path is 'SOURCE PASSES — NO PACKAGE WAS GRADED', i.e. it graded the source tree and opened no zip. An empty subject must not print the same verdict as a verified one."
+            exit 1
+          fi
+
       - name: web-ext lint (Firefox only)
         if: matrix.target == 'firefox' && matrix.os == 'ubuntu-latest'
         run: npx --yes web-ext@8 lint --source-dir dist/unpacked-firefox --warnings-as-errors
@@ -505,9 +596,94 @@ jobs:
     # push where a gate is most likely to have quietly stopped checking, and it
     # is also the push where `gates` is skipped for having nothing to grade.
     #
-    # It is the one call in these workflows that is not `node scripts/<name>.mjs`,
-    # which is why the inventory pattern above spells the extension out: a gate
-    # the inventory cannot see is a gate nobody notices the absence of.
+    # It is one of the calls in these workflows that is NOT
+    # `node scripts/<name>.mjs`, which is why the inventory pattern above spells
+    # the extension out: a gate the inventory cannot see is a gate nobody
+    # notices the absence of.
+    #
+    # ⚠️ CORRECTED 2026-08-22 — this line used to say "the ONE call", and that
+    # stopped being true on 2026-08-20, when the AMO gate in the `gates` job
+    # became the first `node Extension/<Tool>/publish/...` call. It is now one of
+    # three such calls (that one, and the two `--zip` runs in `package` here and
+    # in release.yml). The claim was never load-bearing, which is exactly why it
+    # went stale unnoticed while the sentence it explains stayed correct.
+    #
+    # The SAME correction was made to this file's header on the same day, and it
+    # is recorded here rather than there for a mechanical reason worth knowing:
+    # core/CHANGELOG.md, core/README.md, core/core.json, scripts/pack.mjs,
+    # scripts/run-tests.mjs and scripts/sha256.mjs cite this file by line number
+    # (23 citations, all at ci.yml:254-364), so ANY line added near the top
+    # invalidates every one of them. The header was therefore rewritten in place
+    # at exactly its old line count; what it used to say, in full, was: "Every
+    # gate here is a `node scripts/<name>.mjs` call and nothing else, so the
+    # identical command runs on a runner and in PowerShell on the owner's
+    # machine. That is the whole design: CI is a scheduler, the scripts are the
+    # gates." Measured 2026-08-22, "and nothing else" was false three times over.
+    # ⬜ Those 23 citations are ALREADY stale — pack.mjs:16 cites ci.yml:364 for
+    # the web-ext lint step, which is nowhere near :364 — but they live in files
+    # this change does not own, and correcting them is a separate pass.
+    #
+    # ✅ THAT SEPARATE PASS RAN ON 2026-08-22, AND THE CONSTRAINT ABOVE IS NOW
+    # LIFTED. Every `ci.yml:NNN` and `release.yml:NNN` pointer in those six files
+    # was replaced with a searchable anchor — a `- name:` step title, or the
+    # distinctive line of the body being described. Measured after that pass:
+    # `grep -rnoIE "(ci|release)\.yml:[0-9]+" --exclude-dir=.git .` returns hits
+    # only inside CORRECTION RECORDS that quote what the old pointer used to say,
+    # in scripts/pack.mjs, core/CHANGELOG.md and this file. Not one live citation
+    # into either workflow is addressed by line any more, so ADDING LINES NEAR
+    # THE TOP OF THIS FILE NO LONGER INVALIDATES ANYTHING, and the header above
+    # was rewritten longer rather than squeezed to its old line count. One of the
+    # eight was stale in substance as well as position — pack.mjs described a
+    # `release.yml` invocation of `pack.mjs --target chromium --release` with no
+    # `--out`, which release.yml does not make; that form survives only inside
+    # the release-notes text as a reproduce-it-yourself command. A pointer nobody
+    # can follow hides a claim nobody can check.
+    #
+    # ⚠️ CORRECTED 2026-08-22, NOT DELETED — the two lines above read: "Those 23
+    # citations are ALREADY stale by roughly ninety lines — pack.mjs cites
+    # ci.yml:364 for the web-ext lint step, which now sits at :495". BOTH numbers
+    # were false on the day they were typed, inside the paragraph whose whole
+    # subject is line-number rot. The one anchor that cannot rot is HEAD, so use
+    # it: `git show HEAD:.github/workflows/ci.yml | grep -n 'web-ext@8 lint'` →
+    # 485, MEASURED 2026-08-22. The citation says :364. So it was already 121
+    # lines short AT HEAD, before this round added a line — and every working-tree
+    # number quoted for it since has been larger and shorter-lived than that.
+    # No current-file number is written here on purpose: `grep -n 'web-ext@8
+    # lint' .github/workflows/ci.yml` answers for whatever day it is run on, and
+    # a number in prose is the thing nothing recomputes. Which is the same lesson
+    # as the block above, arriving one paragraph later than it should.
+    #
+    # ⚠️ CORRECTED 2026-08-22 (second pass) — THE HEADER WAS REWRITTEN AGAIN, AND
+    # THE VERSION THIS NOTE DESCRIBES ABOVE IS ITSELF SUPERSEDED. What it said,
+    # in full, was: "Every gate here is one command — `node scripts/<name>.mjs`,
+    # or a tool's own `node Extension/<Tool>/publish/<name>.node.js` — so the
+    # identical command runs on a runner and in PowerShell on the owner's
+    # machine. CI is only a scheduler." That corrected a stale claim into a fresh
+    # one: MEASURED 2026-08-22, `grep -c 'shell: bash' .github/workflows/ci.yml`
+    # is 7 — ⚠️ AND IT IS 16 TODAY, for exactly the reason the ⬜ paragraph two
+    # blocks down predicted: the unanchored form counts this file's own prose,
+    # and the prose about it has since grown. Read that paragraph before
+    # believing this number; the anchored form is the one that means anything.
+    # Those seven are multi-line inline blocks that no PowerShell runs
+    # and that no `node scripts/<name>.mjs` describes — plus one more `run: |`
+    # with no `shell:` at all. Correcting a stale sentence into an inaccurate one
+    # is worse than leaving it, because the correction buys it another year of
+    # trust. The header now states the rule AND that it has exceptions, and names
+    # the grep that lists them rather than line numbers that rot. It was again
+    # rewritten at exactly its old line count, for the reason two paragraphs up.
+    # Collapsing those seven blocks into scripts/ is the real fix and is open.
+    #
+    # ⬜ THE GREP IN THE HEADER IS ANCHORED — `grep -cE "^        shell: bash$"`,
+    # not `grep -c 'shell: bash'` — AND THAT IS NOT FUSSINESS. The unanchored form
+    # was written into the header first, and it counts this file's PROSE as well
+    # as its steps: measured 2026-08-22, it returned 7 before this correction was
+    # written and more than that afterwards, because the correction itself says
+    # `shell: bash` several times over. The anchored form returns 7 either way,
+    # and did again on 2026-08-22 after the header rewrite two paragraphs of
+    # prose later — while the unanchored form had by then climbed to 16. A
+    # count that its own explanation moves is this round's lesson in miniature,
+    # and it was caught only because every number here was re-taken after the
+    # last edit instead of at the moment it was first written.
     #
     # The suite mutates a throwaway tree under os.tmpdir() and points each gate
     # at it with --repo-root, so it writes nothing into the checkout.
@@ -517,3 +693,137 @@ jobs:
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - name: Every gate must be proven to fail on a real mutation
         run: node scripts/test/selftest.node.js
+
+  # Appended for the same reason `selftest` above is appended, and stated again
+  # so the next person does not "tidy" it upward: inserting a job higher in this
+  # file shifts every `ci.yml:NNN` citation below it, and this repository cites
+  # this file by line in prose that nothing recomputes. Job order has no effect
+  # on execution.
+  templates:
+    name: templates parse (the tree every future tool is stamped from)
+    runs-on: ubuntu-latest
+    # Deliberately NOT a `needs:` of anything, and deliberately outside the
+    # per-tool matrix: templates/ is not a tool. It is the thing a tool is
+    # stamped FROM, it ships nothing, and it has no id — which is exactly why
+    # nothing was reading it.
+    #
+    # 🔴 EVERY SCRIPT IN HERE RAN IN NO WORKFLOW AND WAS PARSED BY NO GATE, and
+    # the exclusion was FOURFOLD — every layer of it correct on its own terms,
+    # and the four together adding up to nobody looking:
+    #   · scripts/discover.mjs lists `templates/` among its excluded prefixes,
+    #     so the CI matrix never names it;
+    #   · both `find` sweeps in this file — the discovery cross-check and the
+    #     issue-template check — pass `-not -path './templates/*'`;
+    #   · e2e.yml puts `templates` in its SKIP list;
+    #   · scripts/test/selftest.node.js only WRITES a synthetic templates/tool
+    #     into os.tmpdir() to test new-tool.mjs's precedence rule. It never
+    #     executes, or reads, the real files.
+    #
+    # ⚠️ THIS IS A FLOOR, NOT A FIX, AND SAYING SO IS THE POINT. Measured
+    # 2026-08-22 by hand before this job existed: checked=20 failed=0 — every
+    # file parses today. What is being closed is a COVERAGE gap, not an outage,
+    # and the day it goes red is the day it has earned its place. It matters
+    # because new-tool.mjs stamps this tree into every future tool: a break here
+    # is invisible until tool #2 fails on its first day, and is then attributed
+    # to the new tool rather than to the skeleton.
+    #
+    # ⚠️ `new-tool.mjs` IS WRITTEN WITHOUT ITS `scripts/` PREFIX HERE AND BELOW,
+    # ON PURPOSE — the same convention the discovery cross-check above already
+    # follows. The `gate-inventory` job derives its set by grepping this file's
+    # TEXT, so a prose mention of `scripts/<name>.mjs` enters the inventory as
+    # though a workflow called it. Measured 2026-08-22: writing it with the
+    # prefix took the inventory from 17 entries to 18, adding a script no
+    # workflow invokes. It is PRESENT today, so nothing goes red — but the day
+    # that file is renamed the build would fail over a comment, which is exactly
+    # the failure the inventory's own header says it was kept narrow to avoid.
+    #
+    # ⚠️ NOT `node scripts/lint.mjs templates`, WHICH WAS TRIED FIRST: measured
+    # 2026-08-22, that EXITS 2 with 'CANNOT RUN — no tool named "templates"'.
+    # lint.mjs takes a tool id, a Category/Tool_Dir, "core", "scripts", or
+    # nothing at all, and templates/ is none of those. Teaching lint.mjs a
+    # `templates` target is the better long-term home for this check — it would
+    # inherit the REQUIRED_COVERAGE machinery instead of restating it — but that
+    # is an edit to scripts/lint.mjs, and until it lands an unparsed skeleton is
+    # a worse outcome than an inline loop.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - name: Every script under templates/ must parse
+        shell: bash
+        run: |
+          # 🔴 `-e` IS ALREADY ON BEFORE THIS LINE, AND THAT ONCE MADE THIS WHOLE
+          # LOOP POINTLESS. GitHub runs a `run:` step as `bash --noprofile --norc -eo
+          # pipefail {0}`, so writing `set -uo pipefail` added `-u` and removed nothing.
+          # Under `-e` the `out=$(node --check ...)` capture below killed the shell on
+          # the FIRST unparseable file: no `PARSE` line, no node error, no accounting,
+          # no `::error::` — the step went red having printed only the OK lines before
+          # it. Measured 2026-08-22 on this exact body, two syntax errors planted in a
+          # scratch copy of templates/: under the runner's flags the output stops dead
+          # one file before the first break — no PARSE block, no accounting, no
+          # `::error::`; under a bare `bash` BOTH PARSE blocks print and the step
+          # reports `18 of 20 file(s) under templates/ parse.` Those two structural
+          # facts are the measurement and they re-derive on any rebuild of the fixture.
+          # ⚠️ AMENDED 2026-08-22, later pass: this sentence used to pin the two
+          # outputs at 241 and 1825 bytes. The second does not reproduce — an
+          # independent rebuild of the same fixture measured 1916 — because the
+          # difference is node's per-file error text, which carries the scratch path
+          # and moves with the node version. The fixture was never recorded, so
+          # neither figure is re-derivable by a reader and both are gone. Plant two
+          # syntax errors of your own and compare the two shells; the shape is the
+          # finding, not the byte count. Enumerating EVERY broken file
+          # in one run is the only reason this is a loop rather than one lint call, so
+          # the flag was the whole feature. `-e` is now spelled out where a reader can
+          # see it, and every command whose failure this step REPORTS carries its own
+          # `||` so the report survives the failure.
+          set -euo pipefail
+          # DERIVED, NOT LISTED — the same rule the gate inventory at the top of
+          # this file follows. A hand-typed list of paths only ever covers the
+          # files somebody remembered to add, and the next script added is
+          # precisely the one that gets stamped into a tool having never been
+          # parsed. The domain is stated in one place, here, and printed below.
+          # `|| true` because a MISSING templates/ makes find exit 1, and under `-e`
+          # that killed the step before the required-coverage limb below could name
+          # the reason. An empty sweep and a vanished directory must both reach it.
+          files=$(find templates -type f \
+                    \( -name '*.mjs' -o -name '*.cjs' -o -name '*.js' \) \
+                    -not -path '*/node_modules/*' | sort) || true
+          # REQUIRED COVERAGE. An empty sweep is the failure this whole family
+          # keeps paying for: a `find` that stops matching prints nothing and a
+          # loop over nothing exits 0, so "20 files parsed" and "the directory
+          # was renamed" look identical on the checks list. Zero is a RED here.
+          if [ -z "$files" ]; then
+            echo "::error::found no .js/.mjs/.cjs under templates/ at all. Either the skeleton moved and this job is now grading an empty set, or its own find expression is broken — and both of those report as a clean pass unless something like this line stops them."
+            exit 1
+          fi
+          failed=0
+          checked=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            checked=$((checked + 1))
+            # 🔴 The exit code is captured on its own line, never interpolated
+            # beside a command substitution: `printf "%s EXIT %s" "$(basename
+            # "$f")" "$?"` runs the substitution FIRST, so $? is basename's
+            # status and reads 0 over every failure.
+            # ⚠️ THAT IS ONE TRAP; THE FLAGS ARE A SECOND, AND THIS LINE HAD IT.
+            # Same family — a failing thing reporting success — one level over:
+            # there the trap is EXPANSION ORDER, here it is `-e`, which aborts
+            # the shell on a failing substitution in an assignment. Without the
+            # `|| code=$?`, `code` was only ever reachable as 0 on the runner
+            # and the `else` limb below could not be taken.
+            code=0
+            out=$(node --check "$f" 2>&1) || code=$?
+            if [ "$code" -eq 0 ]; then
+              printf 'OK    %s\n' "$f"
+            else
+              printf 'PARSE %s\n' "$f"
+              printf '%s\n' "$out"
+              failed=$((failed + 1))
+            fi
+          done <<< "$files"
+          echo
+          echo "$((checked - failed)) of $checked file(s) under templates/ parse."
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed file(s) above do not parse. new-tool.mjs copies this tree into every new tool, so a syntax error here is not one broken file — it is one broken file per tool created from today onward, discovered by whoever creates the next one."
+            exit 1
+          fi

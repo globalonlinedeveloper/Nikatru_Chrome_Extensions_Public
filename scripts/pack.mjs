@@ -9,14 +9,39 @@
    THE CONTRACT IS THE WORKFLOWS', NOT THIS SCRIPT'S, so it is quoted here
    rather than paraphrased:
 
-     ci.yml:338       node scripts/pack.mjs <tool> --target <target> --out dist
-     ci.yml:345,348   node scripts/verify-refs.mjs --zip dist/<tool>-<target>.zip
-     ci.yml:356       node scripts/pack.mjs <tool> --target <target> --out dist2
-                      ...then sha256 dist/<...>.zip == sha256 dist2/<...>.zip
-     ci.yml:364       web-ext lint --source-dir dist/unpacked-firefox
-     release.yml:88   node scripts/pack.mjs <id> --target chromium --out dist --release
-     release.yml:111  [ -d dist/unpacked-firefox ] || the release stops there
-     release.yml:131  node scripts/pack.mjs <id> --target chromium --release   (no --out)
+   CITED BY STEP NAME, NOT BY LINE. Every one of these is a `- name:` a reader
+   can grep for; the line numbers that stood here were wrong by roughly a
+   hundred lines each and had been for long enough that no state of either file
+   made them right — see the CORRECTED note at the foot of this block.
+
+     ci.yml, job `package`
+       "Build package"                        node scripts/pack.mjs <tool> --target <target> --out dist
+       "Reference integrity (inside the zip)"  node scripts/verify-refs.mjs --zip dist/<tool>-<target>.zip --strict
+       "Leak check (no test/, docs, ...)"      node scripts/verify-refs.mjs --zip dist/<tool>-<target>.zip --leaks
+       "Determinism check (zip is byte-        node scripts/pack.mjs <tool> --target <target> --out dist2
+        reproducible)"                        ...then sha256.mjs dist/<...>.zip == sha256.mjs dist2/<...>.zip
+       "web-ext lint (Firefox only)"           web-ext@8 lint --source-dir dist/unpacked-firefox --warnings-as-errors
+
+     release.yml, job `release`
+       "Build all store packages"              node scripts/pack.mjs <id> --target chromium --out dist --release
+                                               node scripts/pack.mjs <id> --target firefox  --out dist --release
+       "Reference integrity + leak check       node scripts/verify-refs.mjs --zip "$z" --strict --leaks
+        on every artifact"
+       "web-ext lint"                          [ -d dist/unpacked-firefox ] || the release stops there,
+                                               then the same web-ext@8 lint as CI
+       "Checksums"                             sha256sum *.zip  (coreutils, not sha256.mjs)
+
+   ⚠️ CORRECTED 2026-08-22. The block above used to cite these by line —
+   ci.yml:338 / :345,348 / :356 / :364 and release.yml:88 / :111 / :131. All
+   eight were stale: ci.yml:364 lands in a comment about the AMO gate, and the
+   web-ext step was already ~120 lines further down AT HEAD, so the citation was
+   never right in any state a reader could check out. One was stale in SUBSTANCE
+   as well as position: `release.yml:131 ... --target chromium --release (no
+   --out)` describes an invocation release.yml does not make. Both of its pack
+   calls pass `--out dist`; the bare `--release` form survives only inside the
+   release-notes text, as the command a third party runs to reproduce the digests
+   in SHA256SUMS.txt. Step names move only when somebody renames a step, and a
+   rename is a thing you can grep for.
 
    Which fixes four things: the output is `<out>/<id>-<target>.zip`, `--out`
    defaults to `dist`, an unpacked tree is left at `<out>/unpacked-<target>/`,
@@ -98,8 +123,11 @@ function crc32(buf) {
   return (c ^ -1) >>> 0;
 }
 
-/* A FIXED timestamp is the whole determinism story, and ci.yml:352-360 is the
-   check that proves it: build twice, compare sha256. Same constant as
+/* A FIXED timestamp is the whole determinism story, and ci.yml's
+   "Determinism check (zip is byte-reproducible)" step is the check that proves
+   it: build twice, compare sha256. (Cited by step name since 2026-08-22; it
+   used to read ci.yml:352-360, which is now a comment about the store axis.)
+   Same constant as
    templates/tool/publish/pack.mjs (1 Jan 2026, 00:00) so a tool's own packager
    and this one cannot drift on it. */
 const DOS_TIME = 0x0000, DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
@@ -441,7 +469,10 @@ if (target === 'chromium') {
 } else {
   const overlayRel = tool.targets && tool.targets.firefox ? tool.targets.firefox.overlay : undefined;
   if (typeof overlayRel !== 'string' || !overlayRel) {
-    /* ci.yml:324-331 states this outcome as a decision rather than an accident:
+    /* ci.yml states this outcome as a decision rather than an accident, in the
+       comment above its `package` job's matrix — grep it for `quietly stops
+       building Firefox`. (Cited by phrase since 2026-08-22; it used to read
+       ci.yml:324-331, which now lands in the store-identity block.) It says:
        "a tool that cannot build a firefox package FAILS this leg rather than
        skipping it ... the right fix is the overlay, not a matrix that quietly
        stops building Firefox." A skipped leg and a passing leg are the same row
@@ -646,7 +677,7 @@ r.pass('wrote ' + forHumans(zipPath), entries.length + ' entries — sorted, fix
     r.pass('the archive reads back as ' + wrote.length + ' entries', 'the list and the archive agree');
     extractTo(zipPath, unpackedDir);
     r.pass('unpacked to ' + forHumans(unpackedDir) + '/', target === 'firefox'
-      ? 'inflated from the zip — this is what `web-ext lint --source-dir` reads (ci.yml:364, release.yml:111)'
+      ? 'inflated from the zip — this is what `web-ext lint --source-dir` reads (the "web-ext lint" steps in ci.yml and release.yml)'
       : 'inflated from the zip, not copied from the source tree');
   }
 }

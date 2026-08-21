@@ -10,12 +10,126 @@
    WHAT THIS FILE IS, AND WHY IT IS NOT gen-catalog.mjs
 
    gen-catalog.mjs writes a table into README.md — a catalogue for a HUMAN
-   reading this repository. This writes catalog/extensions.json — a catalogue for
-   a MACHINE in another repository. The storefront (Nikatru_Storefront_Public) fetches
-   this path over https and byte-compares its vendored copy against it, so the
-   bytes here are a published interface, not an internal convenience.
+   reading this repository. This writes catalog/extensions.json — a catalogue in
+   the shape a MACHINE in another repository consumes.
 
-   Two consumers, two shapes, ONE source: every field below is read out of a
+   🔴 CORRECTION 2026-08-22 — NOTHING FETCHES THIS FILE TODAY, AND THIS HEADER
+   CLAIMED SOMETHING DID. The sentence that stood immediately above read:
+
+     "The storefront (Nikatru_Storefront_Public) fetches this path over https and
+      byte-compares its vendored copy against it, so the bytes here are a
+      published interface, not an internal convenience."
+
+   Every clause of it is false as of this date, measured rather than assumed:
+
+     · THE NAMED CONSUMER IS NOT A REPOSITORY ANY MORE.
+       `gh repo list globalonlinedeveloper --limit 100` returns 13 repositories
+       and none is called Nikatru_Storefront_Public. It was deleted from the org
+       on 2026-08-19 after the one-repo/one-pipeline lock; Platform_Public's
+       catalog/store-matrix.json records the deletion, and the only surviving
+       copy is a git bundle.
+
+     · NO READER EXISTS IN ANY LANGUAGE. Searched for the literal
+       `extensions.json`, for `Nikatru_Extensions`, for `Storefront`, and for the
+       storefront's own helper names (readVendored, sync-vendor,
+       generate-apps-data), over ALL FILE TYPES — not just .mjs/.js — with
+       gitignored trees included, in five roots:
+
+         Projects/Nikatru_Extensions_Public   hits in FIVE files, every one
+                                              internal to this repo:
+                                              .github/workflows/ci.yml,
+                                              .gitignore,
+                                              scripts/check-catalog.mjs,
+                                              scripts/README.md, and THIS FILE.
+                                              ⚠️ NO HIT COUNT IS QUOTED FOR THIS
+                                              CELL, on purpose — see the note
+                                              below. It said "13 hits", which was
+                                              exact at HEAD and false by the time
+                                              it was committed.
+         Projects/Nikatru_Extensions_Private   1 hit — a .gitignore line about
+                                              .vscode/extensions.json, quoted in
+                                              TOOLS-PIPELINE.md:1192
+         Projects/Nikatru_Platform_Public      2 hits, BOTH PROSE COMMENTS:
+                                              catalog/store-matrix.json:163 and
+                                              tooling/ci/assert-catalog-contract.mjs:56
+         Projects/Nikatru_Platform_Private    12 hits, all notes/decisions/plans
+         Claude/nikatru (the business brain)   0 hits
+
+       Zero of those is a read. The generator that would be the plausible reader,
+       Platform_Public tooling/sites/generate-apps-data.mjs, reads catalog/apps.json
+       and writes sites/_shared/_data/apps.json; that directory holds apps.json and
+       site.json and nothing else. Platform_Private notes/HANDOFF-2026-08-21.md:311
+       says it outright: "The platform repo has no reader for that file — only
+       comments."
+
+       ⚠️ PRECISION ON THE LAST CELL OF THAT TABLE — `Claude/nikatru  0 hits` —
+       measured 2026-08-22 and appended rather than folded into the cell, so that
+       what the record claimed stays visible. A PUBLISHED ZERO IS ONLY A
+       MEASUREMENT WHEN ITS DOMAIN IS STATED, and the domain this bullet states
+       is the whole term list, not one term of it. The zero is exact for the
+       literal `extensions.json`; it is NOT the number for the list:
+
+         cd Claude
+         grep -rniI -E "extensions\.json" nikatru          ->  0 hits
+         grep -rniI -E "extensions\.json|Nikatru_Extensions|Storefront|readVendored|sync-vendor|generate-apps-data" nikatru
+                                                          ->  7 hits
+
+       All seven are the word "Storefront", in prose, in two files:
+       nikatru/README.md (:33, :68, :76, :98, :104, :106) and
+       nikatru/vendors/cloudflare.md (:138). Not one is a read, so the finding
+       above is untouched — what was wrong was the WIDTH of the claim, not the
+       claim.
+
+       ⚠️ AND THE EXTENSIONS_PUBLIC CELL NO LONGER QUOTES A NUMBER AT ALL,
+       CORRECTED 2026-08-22. It read "13 hits". That was exact against HEAD and
+       it was WRONG IN THE WORKING TREE THE MOMENT IT WAS WRITTEN, under a
+       "CORRECTION 2026-08-22" header, i.e. presented as a measurement of the
+       day. The count in the tree that shipped it was 19, and the whole of the
+       +6 was prose added by that same edit — five new occurrences inside THIS
+       comment block plus one in scripts/README.md. A paragraph that counts the
+       occurrences of a string, in a file, by adding occurrences of that string
+       to that file, cannot publish a stable count; the FILE LIST can, and does.
+
+       An earlier version of this note blamed the instability on whether the
+       walk descends into .git. MEASURED 2026-08-22: with .git it is one higher
+       than without — a delta of 1. That was the minor cause named as the cause,
+       while the dominant mover (this comment) went unmentioned.
+
+       TO RE-DERIVE ANY CELL, one root at a time, from Projects/ (or from
+       Claude/ for the last one):
+
+         grep -rniI --exclude-dir=.git -E "extensions\.json" <root>
+
+       The two `nikatru`-scoped commands above answer only for the last cell;
+       they were offered as the way to re-derive all five and they cannot. The
+       Platform_Public cell also needs its own exclusion: node_modules carries a
+       binary-extensions.json whose name matches, which is why that cell names
+       both prose files rather than quoting a raw total.
+
+       And one thing those seven hits expose, in nobody's ownership this round:
+       nikatru/README.md:33 still lists `Projects/Nikatru_Storefront_Public/` as
+       the live web-presence directory. Measured 2026-08-22, `ls Projects/`
+       returns exactly four entries — Nikatru_Extensions_Private,
+       Nikatru_Extensions_Public, Nikatru_Platform_Private and
+       Nikatru_Platform_Public — and that is not one of them. The same disease
+       this correction treats, one root over.
+
+     · THE VENDORED COPY EXISTED AND DID NOT SURVIVE THE CUTOVER.
+       Platform_Private notes/ARCHIVED-CUTOVER-RUNBOOK-2026-08-19.md:303 records
+       "Only in ./sites/_shared/_data: extensions.json".
+
+   WHAT IS STILL TRUE, AND WHY NOTHING BELOW IS RELAXED. The SHAPE is depended on
+   even though the FETCH is not: Platform_Private decisions/055 specifies
+   catalog/apps.json gaining "a `listings` block of the shape catalog/extensions.json
+   ALREADY HAS", and decisions/056 §3 keeps the two factories symmetrical on the
+   strength of it — a symmetry, it notes, "that no guard in either repository can
+   see". So this file is a published SHAPE with no live reader: determinism and the
+   BOM refusal below stay exactly as they are, because they cost nothing and the day
+   a consumer returns is the worst day to discover the bytes drifted. What this
+   correction removes is the opposite error — a file that reads as load-bearing when
+   nothing loads from it, which hides the real loss rather than recording it.
+
+   Two catalogues, two shapes, ONE source: every field below is read out of a
    tool.json. Neither generator holds a fact the other does not.
 
    🔴 catalog/extensions.json IS GENERATED. DO NOT HAND-EDIT IT.
@@ -44,10 +158,11 @@
        status = "preview"  otherwise
 
    The published vocabulary is {live, preview} because that is what the sibling
-   catalogue publishes (Nikatru_Android_Apps_Public catalog/apps.json, graded by
-   its assert-catalog-contract.mjs) and the storefront reads both with one
-   reader. A third spelling would be silently skipped by every consumer while
-   looking deliberate here.
+   catalogue publishes — catalog/apps.json in the repository now called
+   Nikatru_Platform_Public, graded by its tooling/ci/assert-catalog-contract.mjs,
+   whose own comment at :56 cites this file for the shape. One vocabulary means
+   one reader can take both. A third spelling would be silently skipped by any
+   such consumer while looking deliberate here.
 
    tool.json's own vocabulary is {idea, wip, shipping, archived} and it is
    INTERNAL — it describes how far the work has got. `live` is not that: it is a
@@ -73,7 +188,7 @@
      · replace a non-empty catalogue with an empty one (--allow-empty to mean it).
 
    DETERMINISM: no timestamps, no environment, no commit sha, no digest. Same
-   tree, same bytes, forever — which is what makes the storefront's byte-compare
+   tree, same bytes, forever — which is what would make a consumer's byte-compare
    able to mean "current" rather than "regenerated".
 
    ── 🔴 A UTF-8 BOM IS REFUSED HERE, ON THE RAW BYTES ─────────────────────────
@@ -86,12 +201,13 @@
      node scripts/check-catalog.mjs              EXIT 0   (before its refusal)
      node scripts/lint.mjs                       EXIT 0
 
-   ...while the consumer this file exists for cannot read it at all. `JSON.parse`
-   throws on a leading U+FEFF in every path Node offers — string OR Buffer,
-   measured on v24 — so the storefront's `readVendored()` reports "not valid
-   JSON", its `sync-vendor.mjs` refuses to vendor the body, and its
-   `generate-apps-data.mjs` produces nothing. The whole storefront section for
-   this factory goes dark on three bytes no gate here objected to.
+   ...while a consumer cannot read it at all. `JSON.parse` throws on a leading
+   U+FEFF in every path Node offers — string OR Buffer, measured on v24 — so a
+   vendoring reader reports "not valid JSON", refuses to vendor the body, and
+   renders nothing. A whole catalogue section goes dark on three bytes no gate
+   here objected to. (The storefront that ran exactly that chain — readVendored,
+   sync-vendor.mjs, generate-apps-data.mjs — is gone; see the correction at the
+   top. The failure mode is not, and it is why this refusal stays.)
 
    The reason it passed is not an oversight in the comparison — it is a helper
    working exactly as designed one layer down. `readText()` in lib/toolinfo.mjs
@@ -99,9 +215,9 @@
    rather than as "corrupt JSON". Every read in this repository inherits that,
    including the `existing === bytes` comparison below, which therefore compared
    the file's CONTENT and never its BYTES. For an internal file that is right.
-   For the one file whose bytes are a published interface it is exactly wrong:
-   the storefront byte-compares what it fetches, so a byte this contract does not
-   allow must never be written, not merely tolerated on read.
+   For the one file whose bytes are the contract it is exactly wrong: a
+   byte-comparing consumer sees what was WRITTEN, so a byte this contract does
+   not allow must never be written, not merely tolerated on read.
 
    So the BOM is tested on the raw Buffer, before any decode, and it is named in
    the failure — a consumer's "Unexpected token" names neither the BOM nor the
@@ -238,7 +354,7 @@ function rowFor(t) {
   const status = listed.length > 0 ? LIVE : PREVIEW;
 
   /* Field order is fixed here rather than left to object-literal accident: it is
-     the byte order the storefront diffs against. */
+     the byte order a consumer's diff would run against. */
   return {
     slug: t.id,
     name: t.name,
@@ -289,10 +405,11 @@ const existing = existingBytes === null
 /* Named once so the --check failure and the rewrite notice cannot drift apart. */
 const BOM_WHY =
   'The first three bytes of ' + outRel + ' are EF BB BF — a UTF-8 byte order mark — before the opening `[`.\n' +
-  'This file is a published interface: Nikatru_Storefront_Public fetches these exact bytes over https and\n' +
-  'byte-compares its vendored copy against them. `JSON.parse` throws on a leading U+FEFF in every path\n' +
-  'Node offers (string and Buffer alike), so with the BOM present the storefront cannot read this\n' +
-  'catalogue at all — it reports "not valid JSON", vendors nothing, and renders no extensions.\n' +
+  'This file is a published SHAPE: its bytes are held to an interface standard even though no consumer\n' +
+  'fetches them today (measured 2026-08-22 — see the correction at the top of this script). `JSON.parse`\n' +
+  'throws on a leading U+FEFF in every path Node offers (string and Buffer alike), so with the BOM\n' +
+  'present any consumer that ever does read this catalogue cannot parse it at all — it would report\n' +
+  '"not valid JSON", vendor nothing, and render no extensions.\n' +
   'Nothing else in this repository notices, because readText() in lib/toolinfo.mjs strips a BOM on read\n' +
   'and every gate here reads through it. That is correct for an internal file and wrong for this one.\n' +
   'PowerShell 5.1 writes a BOM by default from `Out-File -Encoding utf8`; use `Set-Content -Encoding utf8NoBOM`,\n' +
@@ -304,7 +421,7 @@ const BOM_WHY =
    tree before. */
 if (rows.length === 0 && existing !== null && existing.trim() !== '' && existing.trim() !== '[]' && !args.bool('allow-empty')) {
   die('no tool.json produced a catalogue row, so the generated catalogue is empty — and ' + outRel + ' currently\n' +
-    'holds one with content. Overwriting it would publish "this factory ships nothing" to the storefront.\n\n' +
+    'holds one with content. Overwriting it would publish "this factory ships nothing".\n\n' +
     'An empty result is indistinguishable from a broken search. If the catalogue really should be empty, pass --allow-empty.');
 }
 
@@ -326,7 +443,7 @@ const r = new Report('publish-catalog · ' + outRel);
 if (args.bool('check')) {
   if (existing === null) {
     r.fail(outRel + ' does not exist',
-      'It is the published catalogue the storefront fetches, and this run derived ' + rows.length + ' row(s) that belong in it.\n' +
+      'It is the published catalogue, and this run derived ' + rows.length + ' row(s) that belong in it.\n' +
       'Run:  node scripts/publish-catalog.mjs');
     process.exit(r.finish());
   }
