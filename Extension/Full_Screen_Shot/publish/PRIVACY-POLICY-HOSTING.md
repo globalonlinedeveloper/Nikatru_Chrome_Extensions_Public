@@ -72,6 +72,53 @@ Nice to have:
 
 ## 3. Where it can live
 
+> ## ✅ DECIDED AND DONE — 2026-08-21 · option **3d, your own domain**
+>
+> **URL: `https://nikatru.com/fullshot/privacy`**
+>
+> The file is served from the platform repo at
+> `Nikatru_Platform_Public/sites/nikatru/fullshot/privacy.html`, which Cloudflare
+> Pages serves at that path as a **200, not a redirect** — the path was chosen so
+> the store-facing URL needs no hop. It is in `sitemap.xml`, carries its own
+> canonical, and passes `check-site-integrity.mjs`.
+>
+> **§1 placeholders are filled.** Effective/updated date `2026-08-21`; developer
+> name **Rajasekar Selvam** (the legal name on GST and Udyam — see
+> `nikatru/business/company-master.md`); contact **support@nikatru.com**, chosen by
+> the owner on 2026-08-21 over `privacy@` and `grievance@` because it already
+> exists, is already monitored, and is already the public address on the site and
+> on the GST/Udyam registrations — which also satisfies §7's own done-check that
+> the policy contact match the store support email. The developer-instruction
+> comment at the top of the file was deleted, per §1.
+>
+> **One edit beyond §1**, and it is worth knowing about: the visible `<footer>`
+> read *"This document is provided as a starting template; ⟨DEVELOPER NAME⟩ is
+> responsible for its accuracy…"*. That sentence is addressed to the DEVELOPER, not
+> the user, and unlike the top comment §1 tells you to delete, it **renders on the
+> page** — a published policy telling a store reviewer it is a starting template
+> undermines the document they opened to verify. Replaced with the publisher
+> identification (`published by Rajasekar Selvam, trading as NIKATRU`). No
+> substantive claim in §§1–12 was changed.
+>
+> 🔴 **STILL OPEN, and both are deliberate:**
+> 1. **`identity.json`'s `privacyPolicyUrl` is STILL EMPTY.** Its own note says a
+>    URL that 404s is worse than a blank because it reads as done — and the page is
+>    committed but **not yet deployed**. Fill it once the URL actually answers.
+> 2. **`LICENSE`'s `Required Notice:` was never filled in** — it still carries
+>    PolyForm's template example (*"Copyright Yoyodyne, Inc."*). §7's done-check
+>    requires *policy name == LICENSE Required Notice == EU DSA trader name*, and
+>    that three-way agreement cannot hold while one of the three is a placeholder
+>    from the template. Not changed here: editing a licence grant is an owner act.
+>
+> ⚠️ **THE COPY IS IN A DIFFERENT REPO FROM THE SOURCE, AND NO GUARD CAN SEE BOTH.**
+> `assert-enforcement-index` prints *"no row carries kind cross-repo"* — there is no
+> cross-repository enforcement anywhere in this platform. A provenance comment in
+> the served file names this one as the source. Edit the source first, then re-copy.
+>
+> The five options below are left as written: they are the comparison that produced
+> the decision, and 3a–3e remain the right menu if the domain is ever given up.
+
+
 Five workable options, honestly compared. Any of them satisfies §2.
 
 ### 3a. GitHub Pages — free, but read the repo-visibility catch
