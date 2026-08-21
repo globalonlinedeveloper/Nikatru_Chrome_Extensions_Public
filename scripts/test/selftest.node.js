@@ -414,6 +414,92 @@ expect('locales are packaged even when package.include forgets them', {
     writeJson(root, TOOL + '/tool.json', t);
   })
 });
+/* 🔴 PLURAL CATEGORIES — the locale-completeness limb, both directions.
+   Chrome's messages.json has no plural support, so a count-agreeing sentence is
+   spelled one key per CLDR category. Which categories exist differs by language,
+   and until 2026-08-22 this gate did a naive key-set diff: it demanded
+   `itemCountOne` of Japanese, a form Japanese does not have, on every run
+   forever. The cases below pin the exemption from BOTH sides, and every one of
+   them is graded through `--warnings-as-errors` on purpose — this limb warns
+   rather than fails, so an exit code is the only thing that can tell "reported"
+   from "not reported" apart. The base fixture exits 0 under that flag, so a 1
+   here is this limb and nothing else.
+
+   `en` = one|other · `ja` = other alone · `ru` = one|few|many|other.
+   Read from Intl.PluralRules at run time, exactly as the gate reads it. */
+const dropKeys = (obj, keys) => {
+  const o = JSON.parse(JSON.stringify(obj));
+  for (const k of keys) delete o[k];
+  return o;
+};
+function withPlurals(mutate = () => {}) {
+  return fixture(root => {
+    const en = readJson(root, TOOL + '/_locales/en/messages.json');
+    en.itemCountOne = { message: 'one item' };
+    en.itemCountOther = { message: 'several items' };
+    /* NOT a plural: `stepOne` has no `stepOther`, so the base's category set in
+       the default locale is {one}, not en's {one, other}. A suffix is a
+       spelling, not a semantic — the tool's own plurals.mjs records this family
+       paying for that confusion once already. */
+    en.stepOne = { message: 'Step one' };
+    writeJson(root, TOOL + '/_locales/en/messages.json', en);
+    writeJson(root, TOOL + '/_locales/ja/messages.json', dropKeys(en, ['itemCountOne']));
+    writeJson(root, TOOL + '/_locales/ru/messages.json',
+      Object.assign(dropKeys(en, []), { itemCountFew: { message: 'few' }, itemCountMany: { message: 'many' } }));
+    mutate(root);
+  });
+}
+expect('a CLDR category the locale does NOT have is not a missing key', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 0,
+  contains: 'plural-aware: 1 key(s) across 1 locale(s) were NOT counted as missing',
+  root: withPlurals()
+});
+expect('a genuinely missing key in the same locale is STILL reported', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (itemCountOther',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ja/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ja/messages.json'), ['itemCountOther']));
+  })
+});
+expect('a key that merely ENDS in One is not exempted', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (stepOne',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ja/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ja/messages.json'), ['stepOne']));
+  })
+});
+/* The other direction, and it is the one a key-set diff can NEVER see: `ru`
+   needs `itemCountFew`, and `en` has no such key to diff against. Nothing falls
+   back either — chrome.i18n resolves it to the empty string. */
+expect('a plural form the DEFAULT locale does not have is reported when a locale needs it', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: '1 plural form(s) absent (itemCountFew',
+  root: withPlurals(root => {
+    writeJson(root, TOOL + '/_locales/ru/messages.json',
+      dropKeys(readJson(root, TOOL + '/_locales/ru/messages.json'), ['itemCountFew']));
+  })
+});
+
+/* 🔴 AND THE CONVENTION THIS GATE MUST NOT BREAK. The corpus records a SECOND,
+   incompatible plural strategy (pipeline/06-i18n.md I-4): the skeleton emits all
+   SIX CLDR forms into EVERY catalogue so `_other` is a real fallback, and a
+   plain key-set parity check is exactly right for that tree. The family
+   recovery above declines such a base by construction — six suffixes in `en` is
+   not `en`'s own set of two — so a tool following that convention is graded
+   with no exemption at all, as it was before this change. This case is the pin
+   on that, because widening the exemption to "any base with plural suffixes"
+   would silently stop grading those trees. */
+expect('a tool that emits all six forms into every locale keeps the plain parity check', {
+  script: 'policy-check.mjs', argv: ['goodtool', '--warnings-as-errors'], code: 1, contains: 'ja: 1 key(s) missing (itemCountOne',
+  root: fixture(root => {
+    const en = readJson(root, TOOL + '/_locales/en/messages.json');
+    for (const s of ['Zero', 'One', 'Two', 'Few', 'Many', 'Other']) en['itemCount' + s] = { message: s };
+    writeJson(root, TOOL + '/_locales/en/messages.json', en);
+    const ja = JSON.parse(JSON.stringify(en));
+    delete ja.itemCountOne;
+    writeJson(root, TOOL + '/_locales/ja/messages.json', ja);
+  })
+});
+
 expect('an underscore-prefixed root directory fails', {
   script: 'policy-check.mjs', argv: ['goodtool'], code: 1, contains: 'reserved for use by the system',
   root: fixture(root => {
@@ -648,6 +734,464 @@ expect('and --template can then point at the complete one', {
     w(r2, '_skeleton/manifest.json', JSON.stringify({ manifest_version: 3, version: '0.0.1', name: 'x' }, null, 2) + '\n');
     w(r2, '_skeleton/background.js', "'use strict';\n");
   })
+});
+
+/* =====================================================================
+   check-store-packages.mjs
+
+   The gate whose subject is the BUILT ARTIFACT rather than the source. Every
+   mutation below is a real zip written byte by byte, because the defect it was
+   written for is exactly a case where the source was right and the zip was not:
+   on 2026-08-20 six -firefox.zip in Extension/Full_Screen_Shot/publish/ carried
+   `fullshot@REPLACE-WITH-YOUR-DOMAIN.example` while the overlay beside them
+   carried `fullshot@nikatru.com`. A fixture that mocked the reader would have
+   proved nothing about that.
+   ===================================================================== */
+console.log('\ncheck-store-packages.mjs');
+
+/* A minimal STORED (method 0) zip. No compression, so the test depends on no
+   codec and the reader's deflate path is exercised by the real packages the
+   `package` job builds rather than by a synthetic one here. */
+function zipOf(files) {
+  const locals = [], centrals = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const nb = Buffer.from(name, 'utf8'), body = Buffer.from(text, 'utf8');
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4);
+    lh.writeUInt32LE(body.length, 18); lh.writeUInt32LE(body.length, 22);
+    lh.writeUInt16LE(nb.length, 26);
+    locals.push(lh, nb, body);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6);
+    ch.writeUInt32LE(body.length, 20); ch.writeUInt32LE(body.length, 24);
+    ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(offset, 42);
+    centrals.push(ch, nb);
+    offset += 30 + nb.length + body.length;
+  }
+  const lp = Buffer.concat(locals), cp = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(Object.keys(files).length, 8);
+  eocd.writeUInt16LE(Object.keys(files).length, 10);
+  eocd.writeUInt32LE(cp.length, 12); eocd.writeUInt32LE(lp.length, 16);
+  return Buffer.concat([lp, cp, eocd]);
+}
+
+/* The fixture tool declares only `chromium`, so a Firefox package needs the
+   target adding too — a package for a target the tool does not declare is a
+   different question, and conflating them would make these cases ambiguous. */
+function withPackage(zipName, manifest, { firefoxTarget = true, identity = true } = {}) {
+  return fixture(root => {
+    if (identity) {
+      writeJson(root, TOOL + '/publish/identity.json', { slug: 'goodtool', ownerDomain: 'example.test' });
+    }
+    if (firefoxTarget) {
+      const t = readJson(root, TOOL + '/tool.json');
+      t.targets.firefox = { overlay: 'publish/manifest.firefox.json' };
+      writeJson(root, TOOL + '/tool.json', t);
+      /* The overlay must EXIST: toolinfo.mjs treats a `targets.firefox.overlay`
+         pointing at a missing file as a tool.json contract error, which makes
+         every gate exit 2 before it reads anything. Writing the declaration
+         without the file is how the first draft of these cases turned nine
+         mutations into nine identical CANNOT RUNs. */
+      writeJson(root, TOOL + '/publish/manifest.firefox.json', {
+        browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+      });
+    }
+    const abs = path.join(root, TOOL, 'publish', zipName);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    /* Three shapes, and the Buffer case is here because leaving it out is a
+       real bug this file caught: `zipOf({...})` returns a Buffer, fell through
+       to the object branch, and was JSON.stringify'd INTO a manifest.json —
+       so the "archive with no manifest" case shipped an archive that had one,
+       and the gate correctly graded it and the assertion failed. A fixture that
+       does not build what its name says builds is a test of nothing.
+         string -> written as-is (a file that is not a zip at all)
+         Buffer -> written as-is (a zip this case assembled itself)
+         object -> wrapped as the archive's manifest.json */
+    const bytes = Buffer.isBuffer(manifest) ? manifest
+      : typeof manifest === 'string' ? Buffer.from(manifest, 'utf8')
+        : zipOf({ 'manifest.json': JSON.stringify(manifest) });
+    fs.writeFileSync(abs, bytes);
+  });
+}
+
+const goodFfManifest = {
+  manifest_version: 3, version: '1.0.0', name: 'x',
+  browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+};
+
+expect('a package whose gecko.id agrees with identity.json passes', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'goodtool@example.test',
+  root: withPackage('goodtool-1.0.0-firefox.zip', goodFfManifest)
+});
+
+/* 🔴 THE RECORDED DEFECT. */
+expect('a BUILT package carrying the placeholder gecko.id is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'MUST NOT BE UPLOADED TO AMO',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@REPLACE-WITH-YOUR-DOMAIN.example' } }
+  })
+});
+
+/* Two real-looking domains. No placeholder test catches this one, and AMO fixes
+   whichever reaches it first — permanently. */
+expect('a package whose gecko.id disagrees with identity.json is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'agrees with publish/identity.json',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@someone-elses-domain.test' } }
+  })
+});
+
+expect('a Firefox package with no gecko.id at all is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'carries a gecko.id',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest, browser_specific_settings: { gecko: { strict_min_version: '128.0' } }
+  })
+});
+
+expect('a listed add-on that self-hosts updates is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'must not self-host updates',
+  root: withPackage('goodtool-1.0.0-firefox.zip', {
+    ...goodFfManifest,
+    browser_specific_settings: { gecko: { id: 'goodtool@example.test', update_url: 'https://example.test/u.json' } }
+  })
+});
+
+/* The chromium package goes to Chrome AND Edge unchanged, so a Firefox-only key
+   in it ships twice. The target is decided by CONTENT, so this zip is graded as
+   a Firefox one — which is itself the finding: it is named as a chromium
+   artifact and is not one. */
+expect('a chromium-named package carrying browser_specific_settings is not silently accepted', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'MUST NOT BE UPLOADED TO AMO',
+  root: withPackage('goodtool-1.0.0.zip', {
+    manifest_version: 3, version: '1.0.0', name: 'x',
+    browser_specific_settings: { gecko: { id: 'goodtool@REPLACE-WITH-YOUR-DOMAIN.example' } }
+  })
+});
+
+expect('a stale version beside the current one WARNS rather than passing silently', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'is v0.9.0, the tree is v1.0.0',
+  root: withPackage('goodtool-0.9.0-firefox.zip', { ...goodFfManifest, version: '0.9.0' })
+});
+
+/* An unreadable archive must not read as a clean one. */
+expect('a .zip that is not a zip is a finding, not a skip', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'is a readable zip',
+  root: withPackage('goodtool-1.0.0-firefox.zip', 'this is not a zip at all, it is prose')
+});
+
+expect('an archive with no manifest.json is a finding, not a skip', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'contains a manifest.json',
+  root: withPackage('goodtool-1.0.0-firefox.zip', zipOf({ 'README.md': '# not a store package' }))
+});
+
+/* 🔴 THE ANTI-VACUITY PAIR. Zero packages is the CI state and it is legitimate,
+   so it exits 0 — and the run must SAY so, because "0 packages, clean" and
+   "12 packages, clean" printing the same thing is the failure this whole file
+   exists to prevent. */
+expect('zero packages exits 0 but says out loud that it proved nothing', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'ZERO PACKAGES WERE PRESENT',
+  root: fixture(root => { writeJson(root, TOOL + '/publish/identity.json', { slug: 'goodtool', ownerDomain: 'example.test' }); })
+});
+
+/* 🔴 THE CHROMIUM HALF HAD NO update_url REFUSAL. The gecko branch has refused
+   `gecko.update_url` since it was written; the Chromium branch had no equivalent,
+   so the SAME bytes could carry a top-level `update_url` to Chrome Web Store and
+   Edge Add-ons unremarked. Both stores refuse a listed extension that self-hosts
+   updates, at review — which costs a submission slot instead of a build. */
+expect('a chromium package that self-hosts updates is caught', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'has no top-level update_url',
+  root: withPackage('goodtool-1.0.0-chromium.zip',
+    { manifest_version: 3, version: '1.0.0', name: 'x', update_url: 'https://example.test/updates.xml' },
+    { firefoxTarget: false })
+});
+
+/* 🔴 ONE PACKAGE, TWO STORES. These bytes go to Chrome Web Store AND Edge
+   Add-ons, so a localised store field reading "for Chrome" is right in one
+   listing and wrong in the other — the same defect as the Edge listing that told
+   users to open `chrome://`, one layer down. Resolved through the PACKAGED
+   locales, because the store resolves `__MSG_` in the reader's language. */
+expect('a localised store field naming Chrome is caught in the shared package', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 1, contains: 'names no browser in its localised store fields',
+  root: withPackage('goodtool-1.0.0-chromium.zip', zipOf({
+    'manifest.json': JSON.stringify({ manifest_version: 3, version: '1.0.0', default_locale: 'en', name: '__MSG_appName__' }),
+    '_locales/en/messages.json': JSON.stringify({ appName: { message: 'GoodTool for Chrome' } }),
+  }), { firefoxTarget: false })
+});
+
+/* 🔴 AND THE CASE THAT PROVES THE CHECK PARSES INSTEAD OF GREPPING. `description`
+   in a messages.json is TRANSLATOR GUIDANCE and is never shown to a user.
+   MEASURED 2026-08-20 on the real tool: 55 of 55 locale files contain the word
+   "chrome", every one of them in a `description`. A grep would fire 55 times and
+   be wrong 55 times; this must PASS. Without this case the check above could be
+   "fixed" into a grep and no test would notice. */
+expect('the word chrome in a translator DESCRIPTION is not a finding', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 0, contains: 'names no browser in its localised store fields',
+  root: withPackage('goodtool-1.0.0-chromium.zip', zipOf({
+    'manifest.json': JSON.stringify({ manifest_version: 3, version: '1.0.0', default_locale: 'en', name: '__MSG_appName__' }),
+    '_locales/en/messages.json': JSON.stringify({
+      appName: { message: 'GoodTool', description: 'Shown in the Chrome Web Store and chrome://extensions.' },
+    }),
+  }), { firefoxTarget: false })
+});
+
+expect('a tool declaring no targets CANNOT RUN rather than passing', {
+  script: 'check-store-packages.mjs', argv: ['goodtool'], code: 2, contains: 'declares no `targets`',
+  root: fixture(root => {
+    const t = readJson(root, TOOL + '/tool.json');
+    delete t.targets;
+    writeJson(root, TOOL + '/tool.json', t);
+  })
+});
+
+/* =====================================================================
+   check-store-metadata.mjs
+
+   The STORE axis. Two builds, three stores — so the mutations that matter are
+   the ones where those two axes are allowed to drift apart, and the one where a
+   store limit arrives without anybody having read it from the store.
+   ===================================================================== */
+console.log('\ncheck-store-metadata.mjs');
+
+const STORE_FILES = {
+  'title.txt': 'Good Tool',
+  'short-description.txt': 'A fixture extension used by the scripts self-test.',
+  'long-description.txt': 'x'.repeat(400),
+  'category.txt': 'Productivity',
+};
+const SHARED_FILES = {
+  'privacy-policy-url.txt': 'https://example.test/privacy',
+  'support-url.txt': 'https://example.test/support',
+  'screenshots/README.md': '# 1280x800, the one size all three stores take\n',
+};
+
+/* A complete, correct store layer on the fixture tool: three rows, two targets,
+   every directory populated. Mutations below start from this and break one
+   thing, so a failure can only be the thing that was broken. */
+function withStores(mutate = () => {}) {
+  return fixture(root => {
+    const t = readJson(root, TOOL + '/tool.json');
+    t.targets = { chromium: { stores: ['chrome', 'edge'] }, firefox: { overlay: 'publish/manifest.firefox.json' } };
+    writeJson(root, TOOL + '/publish/manifest.firefox.json', {
+      browser_specific_settings: { gecko: { id: 'goodtool@example.test', strict_min_version: '128.0' } }
+    });
+    /* The URL files are a SECOND copy of what identity.json declares, so the
+       fixture carries both — a drift check with only one side present is not a
+       drift check, it is an existence check wearing one. */
+    writeJson(root, TOOL + '/publish/identity.json', {
+      slug: 'goodtool', ownerDomain: 'example.test', supportEmail: 'support@example.test',
+      privacyPolicyUrl: SHARED_FILES['privacy-policy-url.txt'],
+    });
+    t.storeMetadata = {
+      sharedDir: 'store/_shared',
+      stores: {
+        chrome: { target: 'chromium', dir: 'store/chrome', served: false },
+        edge: { target: 'chromium', dir: 'store/edge', served: false },
+        firefox: { target: 'firefox', dir: 'store/firefox', served: false },
+      },
+    };
+    const dirs = { chrome: 'store/chrome', edge: 'store/edge', firefox: 'store/firefox' };
+    for (const d of Object.values(dirs)) {
+      for (const [f, body] of Object.entries(STORE_FILES)) w(root, TOOL + '/' + d + '/' + f, body + '\n');
+    }
+    for (const [f, body] of Object.entries(SHARED_FILES)) w(root, TOOL + '/store/_shared/' + f, body + '\n');
+    /* A real PNG, so the screenshots limb's PASS path is exercised too and the
+       mutations below are the only thing that can empty the directory. */
+    fs.copyFileSync(path.join(REPO, 'templates', 'tool', 'icons', 'icon128.png'),
+      path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png'));
+    mutate(t, root);
+    writeJson(root, TOOL + '/tool.json', t);
+  });
+}
+
+expect('a complete three-store layer passes', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: '3 store row(s) graded',
+  root: withStores()
+});
+
+/* 🔴 THE AXIS MUTATIONS — the two that let builds and stores drift apart. */
+expect('a store naming a target that does not exist is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'which is not in targets',
+  root: withStores(t => { t.storeMetadata.stores.edge.target = 'webkit'; })
+});
+expect('a target no store claims is caught — an artifact going nowhere', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'is claimed by at least one store',
+  root: withStores(t => { t.targets.safari = { overlay: null }; })
+});
+
+/* The three declarations of the store set must agree. */
+expect('a store set that disagrees with the schema vocabulary is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'two declarations of one fact',
+  root: withStores(t => { delete t.storeMetadata.stores.firefox; })
+});
+
+/* served is a GATE — the same absence, two verdicts. */
+expect('a MISSING directory on an unserved store PRINTS and exits 0', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'NO TREE (not served)',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', 'chrome'), { recursive: true, force: true }); })
+});
+expect('the SAME missing directory on a SERVED store FAILS', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the listing is live',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    fs.rmSync(path.join(root, TOOL, 'store', 'chrome'), { recursive: true, force: true });
+  })
+});
+
+/* What is owner-gated is CREATING a listing, not KEEPING one. */
+expect('an EMPTIED listing field fails even on an unserved store', {
+  /* A single-line fragment on purpose: Report.fail() re-indents every wrapped
+     line by eight spaces, so a `contains` that spans the wrap never matches
+     even when the gate is behaving perfectly. */
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'An empty listing field is worse than a missing one',
+  root: withStores((t, root) => { w(root, TOOL + '/store/chrome/title.txt', '   \n'); })
+});
+expect('a missing required listing field is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'category.txt exists',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', 'edge', 'category.txt')); })
+});
+
+expect('an orphan directory under store/ is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'orphaned, unreachable',
+  root: withStores((t, root) => { w(root, TOOL + '/store/opera/title.txt', 'left behind\n'); })
+});
+
+/* 🔴 THE LIMIT MUTATIONS. An invented limit fires on correct input. */
+expect('a limit with no source is REFUSED rather than enforced', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'An invented limit fires on CORRECT input',
+  root: withStores(t => { t.storeMetadata.stores.chrome.limits = { 'title.txt': { max: 75 } }; })
+});
+expect('a value over a SOURCED limit is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'against a maximum of 5',
+  root: withStores(t => {
+    t.storeMetadata.stores.chrome.limits = { 'title.txt': { max: 5, source: 'https://developer.chrome.com/x (fetched 2026-08-20)' } };
+  })
+});
+expect('a value under a SOURCED minimum is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'against a minimum of 250',
+  root: withStores(t => {
+    t.storeMetadata.stores.edge.limits = { 'title.txt': { min: 250, source: 'https://learn.microsoft.com/x (fetched 2026-08-20)' } };
+  })
+});
+
+/* 🔴 THE CONTENT MUTATIONS ON THE SHARED URL FILES.
+   Until 2026-08-22 these files were graded on existence and non-blankness
+   alone, and the real tree shipped a `privacy-policy-url.txt` whose entire
+   content was the word NOT-YET-HOSTED plus a comment saying no submission could
+   proceed — printing PASS the whole time, a day after identity.json had been
+   filled with the live URL. Every case below is red against that version of the
+   guard and green against this one. */
+expect('a URL file holding a refusal notice instead of a URL is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'which is not an https URL',
+  root: withStores((t, root) => { w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'NOT-YET-HOSTED\n'); })
+});
+expect('a URL file that disagrees with publish/identity.json is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'One URL, two files, two values',
+  root: withStores((t, root) => { w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'https://example.test/other-privacy\n'); })
+});
+expect('a URL file holding two URLs is caught — a store field takes one', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'Two lines is two answers',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', 'https://example.test/privacy\nhttps://example.test/privacy2\n');
+  })
+});
+/* The file may carry a dated correction beside the value — the real tree's does
+   — so a `#` comment must not be read as a second URL. */
+expect('a # comment beside the URL is not a second URL', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'agrees with publish/identity.json privacyPolicyUrl',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '# CORRECTED 2026-08-22, was NOT-YET-HOSTED\nhttps://example.test/privacy\n');
+  })
+});
+/* Hosting is owner work, so an unfilled URL PRINTS while nothing is served and
+   FAILS the moment a listing is live — the same split `served` already governs.
+   A guard permanently red on one person's work teaches everyone red is
+   negotiable; a guard green over a live wrong listing teaches nothing at all. */
+expect('an unfilled URL with identity.json ALSO unfilled is an OWNER action, not a failure', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'is not filled in yet',
+  root: withStores((t, root) => {
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '⟨HTTPS URL OF THE HOSTED PRIVACY POLICY⟩\n');
+    const id = readJson(root, TOOL + '/publish/identity.json');
+    delete id.privacyPolicyUrl;
+    writeJson(root, TOOL + '/publish/identity.json', id);
+  })
+});
+expect('the SAME unfilled URL FAILS once a store is served', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the listing is live and this field is already public',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    w(root, TOOL + '/store/_shared/privacy-policy-url.txt', '⟨HTTPS URL OF THE HOSTED PRIVACY POLICY⟩\n');
+    const id = readJson(root, TOOL + '/publish/identity.json');
+    delete id.privacyPolicyUrl;
+    writeJson(root, TOOL + '/publish/identity.json', id);
+  })
+});
+
+/* A read that FAILS is not a result that is EMPTY. An identity.json that does
+   not parse would leave every URL file graded as "nothing to compare against" —
+   the agreement check disarmed, in silence, still printing PASS. */
+expect('an unparseable identity.json is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'must not read as',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', '{ oops\n'); })
+});
+/* 🔴 AND THE SAME HOLE ONE LEVEL IN: PARSES ≠ USABLE. `[]`, `null`, `"x"` and
+   `3` are all valid JSON, so the catch above never fires for them — and every
+   one of them makes `identity[field]` undefined, which the grader then reads as
+   "identity.json declares no URL". The drift check is disarmed exactly as an
+   unparseable file would disarm it, in silence, while the URL file still prints
+   a bare PASS. Both cases below exit 0 against the version of the guard shipped
+   earlier in this round and 1 against this one. */
+expect('an identity.json that is an ARRAY is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'it parses as an array',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', '[]\n'); })
+});
+expect('an identity.json that is JSON `null` is a failure, not a disarmed comparison', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'it parses as null',
+  root: withStores((t, root) => { w(root, TOOL + '/publish/identity.json', 'null\n'); })
+});
+
+/* 🔴 SCREENSHOTS: the README is not an image. REQUIRED_SHARED lists
+   `screenshots/README.md`, so the entire screenshot requirement used to be
+   satisfied by a text file explaining that there are no screenshots. */
+expect('a served listing with zero screenshots is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'the directory holds no .png/.jpg, and a store row is `served: true`',
+  root: withStores((t, root) => {
+    t.storeMetadata.stores.chrome.served = true;
+    fs.rmSync(path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png'));
+  })
+});
+expect('the SAME empty screenshots directory is an OWNER action while nothing is served', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 0, contains: 'holds no images yet',
+  root: withStores((t, root) => { fs.rmSync(path.join(root, TOOL, 'store', '_shared', 'screenshots', 'shot-01.png')); })
+});
+
+/* 🔴 THE DOCUMENTED `--all` INVOCATION, WHICH HAD NEVER RUN. loadAllTools
+   returns an object, not an array, so `!tools.length` was always true and the
+   flag in this guard's own usage line died with "no tool resolved" on a tree
+   holding a complete store layer. No case covered it, which is why it survived.
+   The second limb is the half that matters more: --all must not swallow a
+   tool.json that will not load. */
+expect('--all grades the tree instead of refusing to run', {
+  script: 'check-store-metadata.mjs', argv: ['--all'], code: 0, contains: '3 store row(s) graded',
+  root: withStores()
+});
+expect('--all refuses when a tool.json will not load, rather than grading a shorter tree', {
+  script: 'check-store-metadata.mjs', argv: ['--all'], code: 2, contains: 'the tool set is not the tree',
+  root: withStores((t, root) => { w(root, 'Extension/Broken_Tool/tool.json', '{ oops\n'); })
+});
+
+/* Anti-vacuity. */
+expect('an emptied store set CANNOT RUN rather than passing', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'row set IS the subject',
+  root: withStores(t => { t.storeMetadata.stores = {}; })
+});
+expect('a tool with targets but NO storeMetadata is caught', {
+  script: 'check-store-metadata.mjs', argv: ['goodtool'], code: 1, contains: 'checked by nothing',
+  root: withStores(t => { delete t.storeMetadata; })
 });
 
 /* =====================================================================

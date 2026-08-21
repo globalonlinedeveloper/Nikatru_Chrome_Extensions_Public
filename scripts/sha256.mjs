@@ -6,8 +6,9 @@
      node scripts/sha256.mjs dist/fullshot-chromium.zip
      node scripts/sha256.mjs <file> --repo-root <dir>
 
-   Two call sites, both inside ci.yml's determinism check (ci.yml:352-360), and
-   the whole of this script's contract is visible in them:
+   Two call sites, both inside ci.yml's determinism check -- the `package`
+   job's step named "Determinism check (zip is byte-reproducible)" -- and the
+   whole of this script's contract is visible in them:
 
      node scripts/pack.mjs <tool> --target <target> --out dist2
      a=$(node scripts/sha256.mjs dist/<tool>-<target>.zip)
@@ -18,9 +19,9 @@
    Two independent builds of the same commit, packed into two directories,
    hashed, compared. That comparison is what turns "this extension makes no
    network calls" from a claim into something a reviewer can check for
-   themselves: rebuild from the tag, hash the zip, compare. release.yml:118
-   publishes the digests with coreutils `sha256sum`, so what this prints must be
-   the same shape — a bare lowercase hex digest, no prefix.
+   themselves: rebuild from the tag, hash the zip, compare. release.yml's
+   "Checksums" step publishes the digests with coreutils `sha256sum`, so what
+   this prints must be the same shape — a bare lowercase hex digest, no prefix.
 
    THIS IS THE ONE SCRIPT IN scripts/ WHOSE STDOUT IS DATA, NOT A REPORT
 
@@ -46,8 +47,8 @@
 
      1. Exiting 0 on a file it could not read. Then a="" and b="" and the
         determinism check announces a reproducible build over two zips that do
-        not exist. Every failure path here exits 2, so `set -e` (ci.yml:355)
-        aborts the step at the assignment — verified, a bare `a=$(cmd)` does
+        not exist. Every failure path here exits 2, so `set -e` -- that step
+        opens `set -euo pipefail` -- aborts the step at the assignment — verified, a bare `a=$(cmd)` does
         propagate the substitution's status.
 
      2. Hashing an EMPTY file and reporting success. A zero-byte input hashes to
@@ -72,8 +73,8 @@
 
    Exit codes: 0 a digest was printed · 2 could not run.
    There is deliberately no 1. This script grades nothing — it reports a fact
-   about one file, and ci.yml:360 owns the verdict. An exit-1 branch here would
-   be an assertion nothing can reach, and an assertion that cannot fail is worse
+   about one file, and the determinism step's own `[ "$a" = "$b" ]` line owns
+   the verdict. An exit-1 branch here would be an assertion nothing can reach, and an assertion that cannot fail is worse
    than none: it inflates apparent coverage. */
 
 import fs from 'node:fs';
@@ -96,14 +97,14 @@ args.rejectUnknown(['repo-root']);
 const subjects = args.positional;
 if (subjects.length === 0) {
   die('no file given.\n' + USAGE + '\n' +
-    'This script exists to be captured — ci.yml:357 does a=$(node scripts/sha256.mjs ...) — so\n' +
+    'This script exists to be captured — the determinism step does a=$(node scripts/sha256.mjs ...) — so\n' +
     'printing nothing and exiting 0 would hand the determinism check an empty string that\n' +
     'compares equal to the other empty string. Refusing instead.');
 }
 if (subjects.length > 1) {
   die('expected exactly one file, got ' + subjects.length + ': ' + subjects.join(', ') + '\n' + USAGE + '\n' +
     'stdout here is a single value read by a shell command substitution. Two digests would be\n' +
-    'captured as one two-line string, and the comparison at ci.yml:360 would silently become a\n' +
+    'captured as one two-line string, and the determinism-step comparison would silently become a\n' +
     'comparison of pairs. Call it once per file.');
 }
 
@@ -141,7 +142,7 @@ try {
      alone does not say which directory. */
   die('cannot read ' + abs + ': ' + e.code + ' — ' + e.message + '\n' +
     (e.code === 'EISDIR' ? 'That path is a directory. This hashes one file; the caller names the artifact.\n' : '') +
-    'Exiting 2 rather than 0, because ci.yml:357 captures stdout: a silent empty answer here\n' +
+    'Exiting 2 rather than 0, because the determinism step captures stdout: a silent empty answer here\n' +
     'compares equal to the other silent empty answer and passes the determinism check over a\n' +
     'build that produced no zip at all.');
 }
@@ -150,7 +151,7 @@ try {
 if (buf.length === 0) {
   die(abs + ' is zero bytes long.\n' +
     'An empty file hashes to e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,\n' +
-    'and so does every other empty file — so two empty builds agree, ci.yml:360 reports a\n' +
+    'and so does every other empty file — so two empty builds agree, the determinism step reports a\n' +
     'byte-reproducible package, and the thing it proved is that nothing was built. This is the\n' +
     'same refusal lib/toolinfo.mjs makes for a manifest that parses as []: readable, useless, and\n' +
     'shaped exactly like the answer that gets graded as compliance.');
@@ -169,7 +170,7 @@ process.stdout.write(hex + '\n');
    stdout here is a PIPE — that is what `a=$(node scripts/sha256.mjs ...)` makes
    it. Falling off the end of the module exits 0 only after node has flushed;
    an added `process.exit(0)` one line down would exit 0 whether or not
-   the digest arrived, and an empty capture is the single failure ci.yml:360
+   the digest arrived, and an empty capture is the single failure that comparison
    cannot see (see the header).
 
    Stated at the honest strength: measured on this host — node 24, Windows, Git

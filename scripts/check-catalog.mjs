@@ -179,7 +179,7 @@ const rawCatalogueBytes = fs.readFileSync(catalogueAbs);
 if (rawCatalogueBytes.subarray(0, 3).equals(Buffer.from([0xEF, 0xBB, 0xBF]))) {
   r.fail(catalogueRel + ' starts with a UTF-8 byte order mark (EF BB BF)',
     'The first three bytes are EF BB BF, before the opening `[`.\n' +
-    'These bytes are a published interface: Project_Web_Presence fetches this exact file over https,\n' +
+    'These bytes are a published interface: Nikatru_Storefront_Public fetches this exact file over https,\n' +
     'byte-compares its vendored copy against it, and parses it. `JSON.parse` throws on a leading U+FEFF in\n' +
     'every path Node offers — string and Buffer alike — so with the BOM present the storefront reports\n' +
     '"not valid JSON", vendors nothing and renders no extensions at all.\n' +

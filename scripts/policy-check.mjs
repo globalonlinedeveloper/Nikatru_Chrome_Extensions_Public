@@ -1031,7 +1031,109 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
       /* Non-default locales fall back per key, so a gap degrades rather than
          breaks — a warning, not a failure. */
       const baseKeys = new Set(Object.keys(catalogue));
+
+      /* ── 🔴 A CLDR CATEGORY A LANGUAGE DOES NOT HAVE IS NOT A MISSING KEY ──
+         FIXED 2026-08-22. Until then this limb was a plain key-set diff, and on
+         this tree it printed, on EVERY run:
+
+           WARN  8 locale(s) are missing keys the default has
+                 id: 9 key(s) missing (resultProgressDecodingOne, ...)
+
+         All 72 of those findings were the same shape and none was real.
+         Chrome's messages.json has no plural support — no ICU MessageFormat, no
+         selector — so a sentence that agrees with a count is spelled as ONE KEY
+         PER CLDR CATEGORY, chosen at runtime with Intl.PluralRules.select(n).
+         Which categories a language HAS differs by language: measured here with
+         Intl.PluralRules(tag).resolvedOptions().pluralCategories, `en` has
+         one|other, and id/ja/ko/ms/th/vi/zh have `other` ALONE — so
+         `historyCountOne` is a form those eight languages do not possess. The
+         gate was demanding a key that must not exist. No amount of translation
+         could ever clear it, which is the expensive part: a warning that cannot
+         be cleared teaches readers that this gate's warnings are noise.
+
+         WHERE THE CATEGORY SETS COME FROM. Intl.PluralRules — the CLDR data the
+         JS engine ships — read at gate time, never a table in this file. A
+         hand-written "es/fr/it take one|other" table is ALREADY wrong (current
+         CLDR gives the Romance languages `many`; Hebrew has `two` and no
+         `many`; Latvian has `zero`). The tool's own generator reads the same
+         API, so generator and gate cannot drift apart.
+
+         WHY THE EXEMPTION CANNOT WIDEN INTO "ANYTHING ENDING IN One".
+         This gate must work for any tool, so it does NOT read the tool's
+         private PLURAL_BASES declaration — it RECOVERS the plural families from
+         the default catalogue, and only accepts a base whose category suffixes
+         in the default locale are EXACTLY that locale's own category set. In
+         `en` that means a base needs both `...One` and `...Other` and nothing
+         else: `stepOne` alone is not a family ({one} ≠ {one,other}), and
+         `stepOne` + `stepTwo` is not a family ({one,two} ≠ {one,other}). A key
+         that merely ENDS in "One" therefore keeps being reported, which is the
+         case the tool's own plurals.mjs records paying for once already
+         (`historyConfirmDeleteOne` carried no count at all). Measured on this
+         tree 2026-08-22: the 9 bases recovered this way are exactly the 9 the
+         tool declares by hand, with zero near misses.
+
+         FAIL TOWARD REPORTING. An unknown-but-well-formed tag does not throw —
+         Intl silently answers with the engine's default locale's rules, which
+         would be a wrong answer wearing a right answer's clothes. So the
+         resolved language subtag is compared against the requested one, and a
+         locale whose tag does not resolve to its own CLDR data is graded
+         exactly as it was before this change: no exemption. */
+      const CLDR_ORDER = ['zero', 'one', 'two', 'few', 'many', 'other'];
+      const CLDR_SUFFIX = { zero: 'Zero', one: 'One', two: 'Two', few: 'Few', many: 'Many', other: 'Other' };
+      const langOf = (t) => String(t).split('-')[0].toLowerCase();
+      /* Chrome locale directories use `_` (zh_CN, pt_BR); BCP 47 uses `-`. */
+      const categoriesOf = (chromeLocale) => {
+        try {
+          const canon = Intl.getCanonicalLocales(String(chromeLocale).replace(/_/g, '-'))[0];
+          const opts = new Intl.PluralRules(canon).resolvedOptions();
+          if (langOf(opts.locale) !== langOf(canon)) return null; // engine fell back
+          return CLDR_ORDER.filter(c => opts.pluralCategories.includes(c));
+        } catch (_) { return null; }
+      };
+      const splitCategory = (key) => {
+        for (const [cat, suf] of Object.entries(CLDR_SUFFIX)) {
+          if (key.length > suf.length && key.endsWith(suf)) return { base: key.slice(0, -suf.length), category: cat };
+        }
+        return null;
+      };
+      const defaultCats = categoriesOf(dl);
+      const families = new Set();
+      if (defaultCats) {
+        const byBase = new Map();
+        for (const k of baseKeys) {
+          const sp = splitCategory(k);
+          if (!sp) continue;
+          if (!byBase.has(sp.base)) byBase.set(sp.base, new Set());
+          byBase.get(sp.base).add(sp.category);
+        }
+        for (const [b, cats] of byBase) {
+          if (cats.size === defaultCats.length && defaultCats.every(c => cats.has(c))) families.add(b);
+        }
+      }
+      /* Every key a locale needs, in a stable order: the default catalogue's own
+         order, then any plural form a locale may need that the default does not
+         have (`ru` needs ...Few and ...Many; `en` has neither to copy). */
+      const orderedKeys = [...baseKeys];
+      for (const b of families) {
+        for (const c of CLDR_ORDER) {
+          const k = b + CLDR_SUFFIX[c];
+          if (!baseKeys.has(k)) orderedKeys.push(k);
+        }
+      }
+      const requiredFor = (locCats) => {
+        if (!locCats) return new Set(baseKeys); // no CLDR data: grade as before
+        const req = new Set();
+        for (const k of baseKeys) {
+          const sp = splitCategory(k);
+          if (!sp || !families.has(sp.base)) req.add(k);
+        }
+        for (const b of families) for (const c of locCats) req.add(b + CLDR_SUFFIX[c]);
+        return req;
+      };
+
       const thin = [];
+      const dark = [];
+      let exemptKeys = 0, exemptLocales = 0;
       for (const rel of localesOnDisk) {
         const loc = rel.split('/')[1];
         if (loc === dl) continue;
@@ -1043,12 +1145,33 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
           thin.push(loc + ': ' + (q.error || 'catalogue is not a JSON object of messages'));
           continue;
         }
-        const missing = [...baseKeys].filter(k => !(k in q.value));
+        const locCats = categoriesOf(loc);
+        const required = requiredFor(locCats);
+        const absent = orderedKeys.filter(k => required.has(k) && !(k in q.value));
+        /* Two classes, and they are NOT the same finding. A key the default has
+           falls back to the default. A plural form the default does not have
+           (a `few` for Russian) has nothing to fall back TO — chrome.i18n
+           resolves it to the empty string, so the sentence renders blank. */
+        const missing = absent.filter(k => baseKeys.has(k));
+        const noSource = absent.filter(k => !baseKeys.has(k));
         if (missing.length) thin.push(loc + ': ' + missing.length + ' key(s) missing (' + missing.slice(0, 4).join(', ') + (missing.length > 4 ? ', ...' : '') + ')');
+        if (noSource.length) dark.push(loc + ' [' + (locCats || []).join('|') + ']: ' + noSource.length + ' plural form(s) absent (' + noSource.slice(0, 4).join(', ') + (noSource.length > 4 ? ', ...' : '') + ')');
+        const skipped = [...baseKeys].filter(k => !required.has(k) && !(k in q.value)).length;
+        if (skipped) { exemptKeys += skipped; exemptLocales++; }
       }
       if (thin.length) {
         r.warn(thin.length + ' locale(s) are missing keys the default has',
           thin.join('\n') + '\nThose keys fall back to ' + dl + ', so nothing breaks — that market just reads English.');
+      }
+      if (dark.length) {
+        r.warn(dark.length + ' locale(s) lack a plural form their language requires',
+          dark.join('\n') + '\nThese are NOT in _locales/' + dl + ' either, so there is nothing to fall back to: the language\n' +
+          'has a CLDR category ' + dl + ' does not, and chrome.i18n resolves the missing key to an empty string.\n' +
+          'The sentence renders blank for those counts. Generate the form (see the tool\'s i18n/plurals.mjs).');
+      }
+      if (exemptKeys) {
+        r.note('plural-aware: ' + exemptKeys + ' key(s) across ' + exemptLocales + ' locale(s) were NOT counted as missing — ' +
+          'their CLDR category does not exist in that language (' + families.size + ' plural base(s) recovered from _locales/' + dl + ').');
       }
     }
   } else {
@@ -1169,6 +1292,14 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
      and is the only tool with real Firefox zips). */
   const ffSurface = (typeof ffOverlayRel === 'string' && ffOverlayRel) || hasFfManifest || ffZips.length > 0;
 
+  /* The id publish/identity.json IMPLIES, or null when it cannot imply one.
+     Set below, consumed by the Firefox-manifest limb further down. It exists
+     because identity.json and manifest.firefox.json are TWO COPIES OF ONE FACT
+     for any tool without publish/bump-version.mjs to derive the second from the
+     first -- and fullshot is exactly that tool. Nothing compared them until
+     2026-08-18. */
+  let derivedGeckoId = null;
+
   const idRel = 'publish/identity.json';
   const idAbs = path.join(tool.dirAbs, idRel);
   if (fs.existsSync(idAbs)) {
@@ -1198,6 +1329,8 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
           'stamps the literal id "' + tool.id + '@undefined", which is not a placeholder any packager\n' +
           'recognises, so nothing downstream stops it. Set a domain you control, then run:\n' +
           '  node publish/bump-version.mjs --sync   (from ' + tool.rel + ')');
+      } else if (typeof id.slug === 'string' && id.slug) {
+        derivedGeckoId = id.slug + '@' + od;
       }
     }
   } else if (ffSurface) {
@@ -1227,7 +1360,24 @@ const PLACEHOLDER = /^(?:|todo\b.*|tbd\b.*|fixme\b.*|\?+|xxx+|replace.*|why\b.*)
         r.owner('the Firefox add-on id is ' + (gid ? 'a placeholder ("' + gid + '")' : 'not set') + ' in ' + ffRel,
           'Permanent from the moment AMO signs it. Do not upload this package to AMO until it names a\n' +
           'domain you control.' + (ffZips.length ? '\n' + ffZips.length + ' -firefox.zip file(s) are already built in publish/ and carry it.' : ''));
-      } else r.pass('the Firefox add-on id is set', gid);
+      } else if (derivedGeckoId && gid !== derivedGeckoId) {
+        /* TWO COPIES OF ONE FACT, AND THIS IS THE ONLY THING THAT COMPARES THEM.
+           `node publish/bump-version.mjs --sync` derives the manifest from
+           identity.json and refuses when they disagree -- but that script comes
+           from templates/tool/ and fullshot, the one tool in this repo with a
+           real Firefox surface, does not carry it. So for fullshot the sync
+           check has never run, and editing either file alone was silent.
+           A disagreement here is FATAL rather than an owner action: both values
+           are real domains, so no placeholder test catches it, and the one that
+           reaches AMO is permanent. */
+        r.fail('the Firefox add-on id agrees with publish/identity.json',
+          ffRel + ' carries gecko.id "' + gid + '" but ' + idRel + ' implies "' + derivedGeckoId + '".' + '\n' +
+          'These are two copies of one fact. Both look real, so no placeholder check catches the\n' +
+          'disagreement, and AMO fixes whichever reaches it FIRST -- permanently. Where a tool carries\n' +
+          'publish/bump-version.mjs, run `node publish/bump-version.mjs --sync` from ' + tool.rel + ';\n' +
+          'this tool does not, so edit ' + ffRel + ' to match ' + idRel + ' by hand, or change both.');
+      } else r.pass('the Firefox add-on id is set', gid +
+        (derivedGeckoId ? ' -- and agrees with ' + idRel : ''));
     }
   }
 

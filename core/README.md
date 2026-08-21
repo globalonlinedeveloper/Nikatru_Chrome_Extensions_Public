@@ -216,7 +216,7 @@ These are the reasons this is 0.1.0. Each is a real hole, stated so nobody has t
    files that exits 0 is indistinguishable from a passing one. Nothing in `.github/workflows/ci.yml`
    changed to clear it; three sims and a coverage guard landed.
    Two corrections while this entry is being rewritten. **The `::error::` line quoted here was never a
-   quotation** — the real message at `ci.yml:255` is longer and differently punctuated, and it was
+   quotation** — the real message -- the `::error::` inside `ci.yml`'s *Lint + run core sims* step -- is longer and differently punctuated, and it was
    presented verbatim in this file, in `core.json` and in `core/CHANGELOG.md`. And the red would have
    survived a token fix: `ci.yml` tests `-eq 0`, so one trivial file turns the job green for good, which is
    why `core/test/coverage.node.js` exists.

@@ -151,12 +151,53 @@ Limited Use certification (all three must be affirmed — FullShot qualifies):
 - ☑ I do not use or transfer user data for purposes unrelated to my item's single purpose.
 - ☑ I do not use or transfer user data to determine creditworthiness or for lending.
 
-Privacy policy URL (required — item handles user data): ⟨PASTE HOSTED URL of PRIVACY-POLICY.html⟩
+Privacy policy URL (required — item handles user data):
+```
+https://nikatru.com/fullshot/privacy
+```
+**FILLED 2026-08-22.** Until then this cell read `⟨PASTE HOSTED URL of PRIVACY-POLICY.html⟩` and
+was the only substantive owner placeholder left in this document. It is no longer an owner decision:
+the value is `publish/identity.json` `privacyPolicyUrl`, and it was **re-verified before being written
+here** — `GET https://nikatru.com/fullshot/privacy` answered **HTTP 200 with 0 redirect hops**,
+`content-type: text/html; charset=utf-8`. Direct-200 matters because a store listing URL is the one
+URL a reviewer opens by hand and an automated re-check months later is what finds a dead one.
+Paste the **same** URL into all three dashboards (Chrome, Edge, AMO) — divergent policy URLs invite a
+policy-mismatch finding. ⚠️ The SOURCE OF TRUTH for the text is `publish/PRIVACY-POLICY.html` in THIS
+repo; the page actually served is a copy in the storefront repo and no guard can see across that
+boundary, so edit here first and re-copy.
+
+📌 **A placeholder scan of this file does NOT come back zero, and that is correct — measured
+2026-08-22, after this note was written.** `grep -o '⟨' STORE-LISTING.md | wc -l` returns **4**, on
+**4** lines, and not one of them is an outstanding owner action:
+
+1. the legend near the top that *defines* the marker;
+2. the Website-content bullet in Privacy practices, using it for a see-also into
+   `COMPLIANCE-CHECKLIST.md`;
+3. the paragraph directly above, quoting the retired placeholder verbatim so the record still says
+   what it used to say;
+4. and **one in this note itself**, inside the `grep` command quoted above.
+
+Item 4 is not padding, it is the point: the first draft of this note said "returns 3", counted
+before the note existed, and the note's own use of the marker falsified it the moment it was saved
+— twice, because the draft after that said "returns 5" and then lost a mention in an edit. **A
+count of a pattern, written into the file the count is over, must be taken after the writing, never
+before.** That is the same order-of-operations trap as reporting `$?` from inside a command
+substitution — the measurement runs before the thing it claims to measure.
+
+Recorded because `publish/` is exactly where a placeholder scanner would be pointed, and one keyed
+on the bare character will go red on this file forever: a legend, a cross-reference, a quotation and
+a note about scanning are not unfilled fields. Key such a check on the paste-ready FIELD BLOCKS, not
+on the whole document.
 
 ---
 
 ## Assets still needed from the owner (not agent-producible)
 - Screenshots / promo tiles: 1280×800 (or 640×400) screenshots ×1–5; small promo tile 440×280. (The `Reference/` PNGs are a starting point but are not store-sized.)
 - Store icon 128×128 — already in the package (`icons/icon128.png`); confirm it is the final art.
-- A support contact email and (optional) a homepage URL for the listing.
-- The hosted Privacy Policy URL (host `PRIVACY-POLICY.html` anywhere public — e.g. GitHub Pages).
+- ~~A support contact email and (optional) a homepage URL for the listing.~~ **SETTLED — not owner work.**
+  `publish/identity.json` carries `supportEmail` `support@nikatru.com` and `homepageUrl`
+  `https://nikatru.com/`. Read them from there; do not re-decide them here.
+- ~~The hosted Privacy Policy URL (host `PRIVACY-POLICY.html` anywhere public — e.g. GitHub Pages).~~
+  **DONE 2026-08-21, verified live again 2026-08-22** — it is hosted at
+  `https://nikatru.com/fullshot/privacy` (200, 0 redirects) and is written into the Privacy-practices
+  section above. GitHub Pages was never used.
